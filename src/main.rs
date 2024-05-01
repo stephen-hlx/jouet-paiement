@@ -1,3 +1,5 @@
-fn main() {
-    println!("Hello, world!");
-}
+mod account;
+mod model;
+mod transaction_processor;
+
+fn main() {}
