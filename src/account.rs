@@ -1,4 +1,6 @@
+mod account_transaction_processor;
 mod processor;
+
 use std::collections::HashMap;
 
 use thiserror::Error;
@@ -14,12 +16,13 @@ use crate::transaction_processor::{
 /// To capture the account's state, replaying all these transactions is time
 /// consuming and a snapshot is helpful to keep track of certain key attributes
 /// of an account.
+#[derive(Debug, PartialEq)]
 struct AccountSnapshot {
     available: Amount,
     held: Amount,
-    total: Amount,
 }
 
+#[derive(Debug, PartialEq)]
 enum AccountStatus {
     /// The account is active, and is open to transactions.
     Active,
@@ -29,28 +32,24 @@ enum AccountStatus {
 }
 
 /// An account structure used to process transactions.
+#[derive(Debug, PartialEq)]
 pub(crate) struct Account {
     client_id: ClientId,
     status: AccountStatus,
     account_snapshot: AccountSnapshot,
-
-    /// Full history of transactions.
-    /// TODO: how to optimise the memory footprint of this?
-    transactions: Vec<Transaction>,
-
-    /// All transactions received after the account is locked.
-    pending_transactions: Vec<Transaction>,
     deposits: HashMap<TransactionId, Deposit>,
     withdrawals: HashMap<TransactionId, Withdrawal>,
 }
 
 /// A transaction that is ready to be processed for an account.
+#[derive(Debug, PartialEq)]
 pub(crate) struct Transaction {
     transaction_id: TransactionId,
     kind: TransactionKind,
 }
 
 /// The kind of transaction to be processed for an account.
+#[derive(Debug, PartialEq)]
 pub(crate) enum TransactionKind {
     DepositTransaction { amount: Amount },
     WithdrawalTransaction { amount: Amount },
@@ -78,6 +77,7 @@ impl From<RawTransaction> for Transaction {
     }
 }
 
+#[derive(Debug, PartialEq)]
 enum DepositStatus {
     /// This is the initial state of an accepted deposit.
     Accepted,
@@ -98,11 +98,13 @@ enum DepositStatus {
     ChargedBack,
 }
 
+#[derive(Debug, PartialEq)]
 struct Deposit {
     amount: Amount,
     status: DepositStatus,
 }
 
+#[derive(Debug, PartialEq)]
 enum WithdrawalStatus {
     /// This is the initial state of an accepted withdrawal.
     Accepted,
@@ -128,6 +130,7 @@ enum WithdrawalStatus {
     ChargedBack,
 }
 
+#[derive(Debug, PartialEq)]
 struct Withdrawal {
     amount: Amount,
     status: WithdrawalStatus,
@@ -147,3 +150,17 @@ pub(crate) trait AccountStore {
 
 #[derive(Debug, Error)]
 pub(crate) enum AccountStoreError {}
+
+#[cfg(test)]
+impl AccountSnapshot {
+    fn new(available: i32, held: u32) -> Self {
+        use ordered_float::OrderedFloat;
+        AccountSnapshot {
+            available: OrderedFloat(available as f32),
+            held: OrderedFloat(held as f32),
+        }
+    }
+    fn empty() -> Self {
+        Self::new(0, 0)
+    }
+}

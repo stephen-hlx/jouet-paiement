@@ -1,11 +1,7 @@
-use crate::account::{Account, Transaction};
+mod depositor;
 
-pub(crate) trait AccountTransactionProcessor {
-    fn process(
-        &self,
-        account: Account,
-        transaction: Transaction,
-    ) -> Result<(), AccountTransactionProcessorError>;
-}
+pub(super) use depositor::Depositor;
+pub(super) use depositor::DepositorError;
 
-pub(crate) enum AccountTransactionProcessorError {}
+#[cfg(test)]
+pub(super) use depositor::MockDepositor;
