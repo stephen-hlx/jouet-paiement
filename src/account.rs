@@ -51,11 +51,11 @@ pub(crate) struct Transaction {
 /// The kind of transaction to be processed for an account.
 #[derive(Debug, PartialEq)]
 pub(crate) enum TransactionKind {
-    DepositTransaction { amount: Amount },
-    WithdrawalTransaction { amount: Amount },
-    DisputeTransaction,
-    ResolveTransaction,
-    ChargeBackTransaction,
+    Deposit { amount: Amount },
+    Withdrawal { amount: Amount },
+    Dispute,
+    Resolve,
+    ChargeBack,
 }
 
 impl From<RawTransaction> for Transaction {
@@ -63,15 +63,11 @@ impl From<RawTransaction> for Transaction {
         Self {
             transaction_id: raw.transaction_id,
             kind: match raw.kind {
-                RawTransactionKind::DepositTransaction { amount } => {
-                    TransactionKind::DepositTransaction { amount }
-                }
-                RawTransactionKind::WithdrawalTransaction { amount } => {
-                    TransactionKind::WithdrawalTransaction { amount }
-                }
-                RawTransactionKind::DisputeTransaction => TransactionKind::DisputeTransaction,
-                RawTransactionKind::ResolveTransaction => TransactionKind::ResolveTransaction,
-                RawTransactionKind::ChargeBackTransaction => TransactionKind::ChargeBackTransaction,
+                RawTransactionKind::Deposit { amount } => TransactionKind::Deposit { amount },
+                RawTransactionKind::Withdrawal { amount } => TransactionKind::Withdrawal { amount },
+                RawTransactionKind::Dispute => TransactionKind::Dispute,
+                RawTransactionKind::Resolve => TransactionKind::Resolve,
+                RawTransactionKind::ChargeBack => TransactionKind::ChargeBack,
             },
         }
     }

@@ -23,13 +23,13 @@ impl AccountTransactionProcessor {
             kind,
         } = transaction;
         match kind {
-            super::TransactionKind::DepositTransaction { amount } => {
+            super::TransactionKind::Deposit { amount } => {
                 self.depositor.deposit(account, transaction_id, amount)?
             }
-            super::TransactionKind::WithdrawalTransaction { amount } => todo!(),
-            super::TransactionKind::DisputeTransaction => todo!(),
-            super::TransactionKind::ResolveTransaction => todo!(),
-            super::TransactionKind::ChargeBackTransaction => todo!(),
+            super::TransactionKind::Withdrawal { amount } => todo!(),
+            super::TransactionKind::Dispute => todo!(),
+            super::TransactionKind::Resolve => todo!(),
+            super::TransactionKind::ChargeBack => todo!(),
         }
         Ok(())
     }
@@ -129,7 +129,7 @@ mod tests {
     fn deposit(transaction_id: TransactionId, amount: u32) -> Transaction {
         Transaction {
             transaction_id,
-            kind: TransactionKind::DepositTransaction {
+            kind: TransactionKind::Deposit {
                 amount: OrderedFloat(amount as f32),
             },
         }

@@ -126,7 +126,7 @@ mod tests {
         Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::DepositTransaction {
+            kind: TransactionKind::Deposit {
                 amount: OrderedFloat(amount),
             },
         }
@@ -136,7 +136,7 @@ mod tests {
         Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::WithdrawalTransaction {
+            kind: TransactionKind::Withdrawal {
                 amount: OrderedFloat(amount),
             },
         }
@@ -146,7 +146,7 @@ mod tests {
         Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::DisputeTransaction,
+            kind: TransactionKind::Dispute,
         }
     }
 
@@ -154,7 +154,7 @@ mod tests {
         Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::ResolveTransaction,
+            kind: TransactionKind::Resolve,
         }
     }
 
@@ -162,7 +162,7 @@ mod tests {
         Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::ChargeBackTransaction,
+            kind: TransactionKind::ChargeBack,
         }
     }
 }

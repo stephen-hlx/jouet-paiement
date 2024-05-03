@@ -11,11 +11,11 @@ pub struct Transaction {
 /// The kinds of transactions.
 #[derive(Debug, PartialEq)]
 pub enum TransactionKind {
-    DepositTransaction { amount: Amount },
-    WithdrawalTransaction { amount: Amount },
-    DisputeTransaction,
-    ResolveTransaction,
-    ChargeBackTransaction,
+    Deposit { amount: Amount },
+    Withdrawal { amount: Amount },
+    Dispute,
+    Resolve,
+    ChargeBack,
 }
 
 /// The transction processor.

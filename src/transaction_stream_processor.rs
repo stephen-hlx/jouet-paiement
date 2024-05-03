@@ -78,7 +78,7 @@ fn to_transaction(record: TransactionRecord) -> Result<Transaction, TransactionS
         TransactionRecordType::Deposit => Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::DepositTransaction {
+            kind: TransactionKind::Deposit {
                 amount: match optional_amount {
                     Some(amount) => OrderedFloat(amount),
                     None => {
@@ -92,7 +92,7 @@ fn to_transaction(record: TransactionRecord) -> Result<Transaction, TransactionS
         TransactionRecordType::Withdrawal => Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::WithdrawalTransaction {
+            kind: TransactionKind::Withdrawal {
                 amount: match optional_amount {
                     Some(amount) => OrderedFloat(amount),
                     None => {
@@ -106,17 +106,17 @@ fn to_transaction(record: TransactionRecord) -> Result<Transaction, TransactionS
         TransactionRecordType::Dispute => Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::DisputeTransaction,
+            kind: TransactionKind::Dispute,
         },
         TransactionRecordType::Resolve => Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::ResolveTransaction,
+            kind: TransactionKind::Resolve,
         },
         TransactionRecordType::Chargeback => Transaction {
             client_id,
             transaction_id,
-            kind: TransactionKind::ChargeBackTransaction,
+            kind: TransactionKind::ChargeBack,
         },
     };
     Ok(transaction)
@@ -153,27 +153,27 @@ mod tests {
     }
 
     fn deposit_transaction(amount: f32) -> Transaction {
-        transaction(TransactionKind::DepositTransaction {
+        transaction(TransactionKind::Deposit {
             amount: OrderedFloat(amount),
         })
     }
 
     fn withdrawal_transaction(amount: f32) -> Transaction {
-        transaction(TransactionKind::WithdrawalTransaction {
+        transaction(TransactionKind::Withdrawal {
             amount: OrderedFloat(amount),
         })
     }
 
     fn dispute_transaction() -> Transaction {
-        transaction(TransactionKind::DisputeTransaction {})
+        transaction(TransactionKind::Dispute {})
     }
 
     fn resolve_transaction() -> Transaction {
-        transaction(TransactionKind::ResolveTransaction {})
+        transaction(TransactionKind::Resolve {})
     }
 
     fn chargeback_transaction() -> Transaction {
-        transaction(TransactionKind::ChargeBackTransaction {})
+        transaction(TransactionKind::ChargeBack {})
     }
 
     fn transaction(kind: TransactionKind) -> Transaction {
