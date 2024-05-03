@@ -1,13 +1,15 @@
 use crate::model::{Amount, ClientId, TransactionId};
 
 /// The transaction structure accepted by this application.
+#[derive(Debug, PartialEq)]
 pub struct Transaction {
-    client_id: ClientId,
+    pub client_id: ClientId,
     pub transaction_id: TransactionId,
     pub kind: TransactionKind,
 }
 
 /// The kinds of transactions.
+#[derive(Debug, PartialEq)]
 pub enum TransactionKind {
     DepositTransaction { amount: Amount },
     WithdrawalTransaction { amount: Amount },
