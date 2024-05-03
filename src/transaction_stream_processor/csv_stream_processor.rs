@@ -27,16 +27,15 @@ impl TransactionStreamProcessor for CsvStreamProcessor {
 mod tests {
     use std::{cell::RefCell, rc::Rc};
 
+    use assert_matches::assert_matches;
     use rstest::rstest;
 
     use crate::{
         model::{ClientId, TransactionId},
         transaction_stream_processor::{
             TransactionRecord, TransactionRecordConsumer, TransactionRecordConsumerError,
-            TransactionRecordType, TransactionRecordType::Chargeback,
-            TransactionRecordType::Deposit, TransactionRecordType::Dispute,
-            TransactionRecordType::Resolve, TransactionRecordType::Withdrawal,
-            TransactionStreamProcessor,
+            TransactionRecordType::{self, Chargeback, Deposit, Dispute, Resolve, Withdrawal},
+            TransactionStreamProcessError, TransactionStreamProcessor,
         },
     };
 
@@ -99,6 +98,31 @@ mod tests {
         };
         processor.process(input.as_bytes()).unwrap();
         assert_eq!(*records.borrow(), expected);
+    }
+
+    struct Blackhole;
+    impl TransactionRecordConsumer for Blackhole {
+        fn consume(
+            &mut self,
+            _transaction_record: TransactionRecord,
+        ) -> Result<(), TransactionRecordConsumerError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn missing_coma_for_the_optional_field_results_in_parsing_error() {
+        let input = "
+    type,    client, tx, amount
+    dispute,      7,  8";
+        let blackhold = Blackhole;
+        let mut processor = CsvStreamProcessor {
+            consumer: Box::new(blackhold),
+        };
+        assert_matches!(
+            processor.process(input.as_bytes()),
+            Err(TransactionStreamProcessError::ParsingError(_))
+        );
     }
 
     fn transaction(
