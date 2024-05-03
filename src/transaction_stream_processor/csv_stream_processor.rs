@@ -33,6 +33,9 @@ mod tests {
         model::{ClientId, TransactionId},
         transaction_stream_processor::{
             TransactionRecord, TransactionRecordConsumer, TransactionRecordConsumerError,
+            TransactionRecordType, TransactionRecordType::Chargeback,
+            TransactionRecordType::Deposit, TransactionRecordType::Dispute,
+            TransactionRecordType::Resolve, TransactionRecordType::Withdrawal,
             TransactionStreamProcessor,
         },
     };
@@ -57,23 +60,23 @@ mod tests {
     #[case("
     type,    client, tx, amount
     deposit,      1,  2,    3.0",
-            vec![transaction("deposit", 1, 2, Some(3.0))])]
+            vec![transaction(Deposit, 1, 2, Some(3.0))])]
     #[case("
     type,       client, tx, amount
     withdrawal,      4,  5,    6.0",
-            vec![transaction("withdrawal", 4, 5, Some(6.0))])]
+            vec![transaction(Withdrawal, 4, 5, Some(6.0))])]
     #[case("
     type,    client, tx, amount
     dispute,      7,  8,       ",
-            vec![transaction("dispute", 7, 8, None)])]
+            vec![transaction(Dispute, 7, 8, None)])]
     #[case("
     type,    client, tx, amount
     resolve,      9, 10,       ",
-            vec![transaction("resolve", 9, 10, None)])]
+            vec![transaction(Resolve, 9, 10, None)])]
     #[case("
     type,       client, tx, amount
     chargeback,     11, 12,       ",
-            vec![transaction("chargeback", 11, 12, None)])]
+            vec![transaction(Chargeback, 11, 12, None)])]
     #[case("
     type, client, tx, amount
     deposit, 1, 2, 3.0
@@ -81,11 +84,11 @@ mod tests {
     dispute, 7, 8,
     resolve, 9, 10,
     chargeback, 11, 12,",
-            vec![transaction("deposit", 1, 2, Some(3.0)),
-            transaction("withdrawal", 4, 5, Some(6.0)),
-            transaction("dispute", 7, 8, None),
-            transaction("resolve", 9, 10, None),
-            transaction("chargeback", 11, 12, None)])]
+            vec![transaction(Deposit, 1, 2, Some(3.0)),
+            transaction(Withdrawal, 4, 5, Some(6.0)),
+            transaction(Dispute, 7, 8, None),
+            transaction(Resolve, 9, 10, None),
+            transaction(Chargeback, 11, 12, None)])]
     fn csv_parser_works(#[case] input: &str, #[case] expected: Vec<TransactionRecord>) {
         let records = Rc::new(RefCell::new(Vec::new()));
         let record_sink = RecordSink {
@@ -99,13 +102,13 @@ mod tests {
     }
 
     fn transaction(
-        txn_type: &str,
+        txn_type: TransactionRecordType,
         client_id: ClientId,
         transaction_id: TransactionId,
         optional_amount: Option<f32>,
     ) -> TransactionRecord {
         TransactionRecord {
-            txn_type: txn_type.to_string(),
+            txn_type,
             client_id,
             transaction_id,
             optional_amount,

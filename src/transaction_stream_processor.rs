@@ -20,13 +20,27 @@ enum TransactionStreamProcessError {
 #[derive(Debug, Deserialize, PartialEq)]
 struct TransactionRecord {
     #[serde(rename = "type")]
-    txn_type: String,
+    txn_type: TransactionRecordType,
     #[serde(rename = "client")]
     client_id: ClientId,
     #[serde(rename = "tx")]
     transaction_id: TransactionId,
     #[serde(rename = "amount")]
     optional_amount: Option<f32>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+enum TransactionRecordType {
+    #[serde(rename = "deposit")]
+    Deposit,
+    #[serde(rename = "withdrawal")]
+    Withdrawal,
+    #[serde(rename = "dispute")]
+    Dispute,
+    #[serde(rename = "resolve")]
+    Resolve,
+    #[serde(rename = "chargeback")]
+    Chargeback,
 }
 
 mod csv_stream_processor;
