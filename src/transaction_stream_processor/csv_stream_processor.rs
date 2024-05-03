@@ -2,10 +2,12 @@ use std::io::Read;
 
 use csv::Trim;
 
-use super::{TransactionRecordConsumer, TransactionStreamProcessError, TransactionStreamProcessor};
+use super::{
+    to_transaction, TransactionConsumer, TransactionStreamProcessError, TransactionStreamProcessor,
+};
 
 struct CsvStreamProcessor {
-    consumer: Box<dyn TransactionRecordConsumer>,
+    consumer: Box<dyn TransactionConsumer>,
 }
 
 impl TransactionStreamProcessor for CsvStreamProcessor {
@@ -13,7 +15,7 @@ impl TransactionStreamProcessor for CsvStreamProcessor {
         let mut rdr = csv::ReaderBuilder::new().trim(Trim::All).from_reader(r);
         for result in rdr.deserialize() {
             match result {
-                Ok(it) => self.consumer.consume(it)?,
+                Ok(it) => self.consumer.consume(to_transaction(it)?)?,
                 Err(err) => {
                     return Err(TransactionStreamProcessError::ParsingError(err.to_string()))
                 }
@@ -28,29 +30,27 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use assert_matches::assert_matches;
+    use ordered_float::OrderedFloat;
     use rstest::rstest;
 
     use crate::{
         model::{ClientId, TransactionId},
+        transaction_processor::{Transaction, TransactionKind},
         transaction_stream_processor::{
-            TransactionRecord, TransactionRecordConsumer, TransactionRecordConsumerError,
-            TransactionRecordType::{self, Chargeback, Deposit, Dispute, Resolve, Withdrawal},
-            TransactionStreamProcessError, TransactionStreamProcessor,
+            TransactionConsumer, TransactionConsumerError, TransactionStreamProcessError,
+            TransactionStreamProcessor,
         },
     };
 
     use super::CsvStreamProcessor;
 
     struct RecordSink {
-        records: Rc<RefCell<Vec<TransactionRecord>>>,
+        records: Rc<RefCell<Vec<Transaction>>>,
     }
 
-    impl TransactionRecordConsumer for RecordSink {
-        fn consume(
-            &mut self,
-            transaction_record: TransactionRecord,
-        ) -> Result<(), TransactionRecordConsumerError> {
-            self.records.borrow_mut().push(transaction_record);
+    impl TransactionConsumer for RecordSink {
+        fn consume(&mut self, transaction: Transaction) -> Result<(), TransactionConsumerError> {
+            self.records.borrow_mut().push(transaction);
             Ok(())
         }
     }
@@ -59,23 +59,23 @@ mod tests {
     #[case("
     type,    client, tx, amount
     deposit,      1,  2,    3.0",
-            vec![transaction(Deposit, 1, 2, Some(3.0))])]
+            vec![deposit(1, 2, 3.0)])]
     #[case("
     type,       client, tx, amount
     withdrawal,      4,  5,    6.0",
-            vec![transaction(Withdrawal, 4, 5, Some(6.0))])]
+            vec![withdrawal(4, 5, 6.0)])]
     #[case("
     type,    client, tx, amount
     dispute,      7,  8,       ",
-            vec![transaction(Dispute, 7, 8, None)])]
+            vec![dispute(7, 8)])]
     #[case("
     type,    client, tx, amount
     resolve,      9, 10,       ",
-            vec![transaction(Resolve, 9, 10, None)])]
+            vec![resolve(9, 10)])]
     #[case("
     type,       client, tx, amount
     chargeback,     11, 12,       ",
-            vec![transaction(Chargeback, 11, 12, None)])]
+            vec![chargeback(11, 12)])]
     #[case("
     type, client, tx, amount
     deposit, 1, 2, 3.0
@@ -83,12 +83,12 @@ mod tests {
     dispute, 7, 8,
     resolve, 9, 10,
     chargeback, 11, 12,",
-            vec![transaction(Deposit, 1, 2, Some(3.0)),
-            transaction(Withdrawal, 4, 5, Some(6.0)),
-            transaction(Dispute, 7, 8, None),
-            transaction(Resolve, 9, 10, None),
-            transaction(Chargeback, 11, 12, None)])]
-    fn csv_parser_works(#[case] input: &str, #[case] expected: Vec<TransactionRecord>) {
+            vec![deposit(1, 2, 3.0),
+            withdrawal(4, 5, 6.0),
+            dispute(7, 8),
+            resolve(9, 10),
+            chargeback(11, 12)])]
+    fn csv_parser_works(#[case] input: &str, #[case] expected: Vec<Transaction>) {
         let records = Rc::new(RefCell::new(Vec::new()));
         let record_sink = RecordSink {
             records: records.clone(),
@@ -101,11 +101,8 @@ mod tests {
     }
 
     struct Blackhole;
-    impl TransactionRecordConsumer for Blackhole {
-        fn consume(
-            &mut self,
-            _transaction_record: TransactionRecord,
-        ) -> Result<(), TransactionRecordConsumerError> {
+    impl TransactionConsumer for Blackhole {
+        fn consume(&mut self, _transaction: Transaction) -> Result<(), TransactionConsumerError> {
             Ok(())
         }
     }
@@ -125,17 +122,47 @@ mod tests {
         );
     }
 
-    fn transaction(
-        txn_type: TransactionRecordType,
-        client_id: ClientId,
-        transaction_id: TransactionId,
-        optional_amount: Option<f32>,
-    ) -> TransactionRecord {
-        TransactionRecord {
-            txn_type,
+    fn deposit(client_id: ClientId, transaction_id: TransactionId, amount: f32) -> Transaction {
+        Transaction {
             client_id,
             transaction_id,
-            optional_amount,
+            kind: TransactionKind::DepositTransaction {
+                amount: OrderedFloat(amount),
+            },
+        }
+    }
+
+    fn withdrawal(client_id: ClientId, transaction_id: TransactionId, amount: f32) -> Transaction {
+        Transaction {
+            client_id,
+            transaction_id,
+            kind: TransactionKind::WithdrawalTransaction {
+                amount: OrderedFloat(amount),
+            },
+        }
+    }
+
+    fn dispute(client_id: ClientId, transaction_id: TransactionId) -> Transaction {
+        Transaction {
+            client_id,
+            transaction_id,
+            kind: TransactionKind::DisputeTransaction,
+        }
+    }
+
+    fn resolve(client_id: ClientId, transaction_id: TransactionId) -> Transaction {
+        Transaction {
+            client_id,
+            transaction_id,
+            kind: TransactionKind::ResolveTransaction,
+        }
+    }
+
+    fn chargeback(client_id: ClientId, transaction_id: TransactionId) -> Transaction {
+        Transaction {
+            client_id,
+            transaction_id,
+            kind: TransactionKind::ChargeBackTransaction,
         }
     }
 }
