@@ -5,7 +5,10 @@ use crate::{
     transaction_processor::{Transaction, TransactionKind},
 };
 
-use super::processor::depositor::{Depositor, DepositorError, SimpleDepositor};
+use super::processor::{
+    depositor::{Depositor, DepositorError, SimpleDepositor},
+    withdrawer::{SimpleWithdrawer, Withdrawer, WithdrawerError},
+};
 
 pub trait AccountTransactionProcessor {
     fn process(
@@ -17,6 +20,7 @@ pub trait AccountTransactionProcessor {
 
 pub struct SimpleAccountTransactionProcessor {
     depositor: Box<dyn Depositor + Send + Sync>,
+    withdrawer: Box<dyn Withdrawer + Send + Sync>,
 }
 
 impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
@@ -34,7 +38,9 @@ impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
             TransactionKind::Deposit { amount } => {
                 self.depositor.deposit(account, transaction_id, amount)?
             }
-            TransactionKind::Withdrawal { amount } => todo!(),
+            TransactionKind::Withdrawal { amount } => {
+                self.withdrawer.withdraw(account, transaction_id, amount)?
+            }
             TransactionKind::Dispute => todo!(),
             TransactionKind::Resolve => todo!(),
             TransactionKind::ChargeBack => todo!(),
@@ -46,9 +52,11 @@ impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
 impl SimpleAccountTransactionProcessor {
     pub fn new() -> Self {
         let depositor = SimpleDepositor;
+        let withdrawer = SimpleWithdrawer;
 
         Self {
             depositor: Box::new(depositor),
+            withdrawer: Box::new(withdrawer),
         }
     }
 }
@@ -61,12 +69,25 @@ pub enum AccountTransactionProcessorError {
 
     #[error("Depositing to a locked account is not allowed.")]
     CannotDepositToLockedAccount,
+    #[error("Withdrawing from a locked account is not allowed.")]
+    CannotWithdrawFromLockedAccount,
+    #[error("There is insufficient fund in the account for the withdrawal requested.")]
+    InsufficientFundForWithdrawal,
 }
 
 impl From<DepositorError> for AccountTransactionProcessorError {
     fn from(err: DepositorError) -> Self {
         match err {
             DepositorError::AccountLocked => Self::CannotDepositToLockedAccount,
+        }
+    }
+}
+
+impl From<WithdrawerError> for AccountTransactionProcessorError {
+    fn from(err: WithdrawerError) -> Self {
+        match err {
+            WithdrawerError::AccountLocked => Self::CannotWithdrawFromLockedAccount,
+            WithdrawerError::InsufficientFund => Self::InsufficientFundForWithdrawal,
         }
     }
 }
@@ -80,8 +101,11 @@ mod tests {
 
     use crate::{
         account::{
-            processor::depositor::{mock::MockDepositor, DepositorError},
-            Account, AccountSnapshot, AccountStatus, Deposit,
+            processor::{
+                depositor::{mock::MockDepositor, DepositorError},
+                withdrawer::{mock::MockWithdrawer, WithdrawerError},
+            },
+            Account, AccountSnapshot, AccountStatus,
         },
         model::{Amount, ClientId, TransactionId},
         transaction_processor::{Transaction, TransactionKind},
@@ -96,20 +120,21 @@ mod tests {
 
     #[test]
     fn calls_depositor_for_deposit() {
-        let mut account = account(AccountStatus::Active, 0, 0, vec![]);
+        let mut account = some_account();
         let transaction_id: TransactionId = 0;
         let amount: Amount = OrderedFloat(0.0);
 
         let depositor = MockDepositor::new();
         depositor.expect(&mut account, transaction_id, amount);
         depositor.to_return(Ok(()));
+        let withdrawer = MockWithdrawer::new();
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
+            withdrawer: Box::new(withdrawer),
         };
         processor.process(&mut account, deposit(0, 0)).unwrap();
     }
 
-    // TODO: automate this for new error types
     #[rstest]
     #[case(
         DepositorError::AccountLocked,
@@ -119,15 +144,17 @@ mod tests {
         #[case] depositor_error: DepositorError,
         #[case] expected_error: AccountTransactionProcessorError,
     ) {
-        let mut account = account(AccountStatus::Active, 0, 0, vec![]);
+        let mut account = some_account();
         let transaction_id: TransactionId = 0;
         let amount: Amount = OrderedFloat(0.0);
 
         let depositor = MockDepositor::new();
         depositor.expect(&mut account.clone(), transaction_id, amount);
         depositor.to_return(Err(depositor_error));
+        let withdrawer = MockWithdrawer::new();
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
+            withdrawer: Box::new(withdrawer),
         };
 
         assert_eq!(
@@ -136,17 +163,61 @@ mod tests {
         );
     }
 
-    fn account(
-        status: AccountStatus,
-        available: i32,
-        held: u32,
-        deposits: Vec<(TransactionId, Deposit)>,
-    ) -> Account {
+    #[test]
+    fn calls_withdrawer_for_withdrawal() {
+        let mut account = some_account();
+        let transaction_id: TransactionId = 0;
+        let amount: Amount = OrderedFloat(0.0);
+
+        let depositor = MockDepositor::new();
+        let withdrawer = MockWithdrawer::new();
+        withdrawer.expect(&mut account, transaction_id, amount);
+        withdrawer.to_return(Ok(()));
+        let processor = SimpleAccountTransactionProcessor {
+            depositor: Box::new(depositor),
+            withdrawer: Box::new(withdrawer),
+        };
+        processor.process(&mut account, withdrawal(0, 0)).unwrap();
+    }
+
+    #[rstest]
+    #[case(
+        WithdrawerError::AccountLocked,
+        AccountTransactionProcessorError::CannotWithdrawFromLockedAccount
+    )]
+    #[case(
+        WithdrawerError::InsufficientFund,
+        AccountTransactionProcessorError::InsufficientFundForWithdrawal
+    )]
+    fn error_returned_from_withdrawer_is_propagated(
+        #[case] withdrawer_error: WithdrawerError,
+        #[case] expected_error: AccountTransactionProcessorError,
+    ) {
+        let mut account = some_account();
+        let transaction_id: TransactionId = 0;
+        let amount: Amount = OrderedFloat(0.0);
+
+        let depositor = MockDepositor::new();
+        let withdrawer = MockWithdrawer::new();
+        withdrawer.expect(&mut account.clone(), transaction_id, amount);
+        withdrawer.to_return(Err(withdrawer_error));
+        let processor = SimpleAccountTransactionProcessor {
+            depositor: Box::new(depositor),
+            withdrawer: Box::new(withdrawer),
+        };
+
+        assert_eq!(
+            processor.process(&mut account, withdrawal(0, 0)),
+            Err(expected_error)
+        );
+    }
+
+    fn some_account() -> Account {
         Account {
             client_id: 1234,
-            status,
-            account_snapshot: AccountSnapshot::new(available, held),
-            deposits: deposits.into_iter().collect(),
+            status: AccountStatus::Active,
+            account_snapshot: AccountSnapshot::empty(),
+            deposits: HashMap::new(),
             withdrawals: HashMap::new(),
         }
     }
@@ -156,6 +227,16 @@ mod tests {
             client_id: CLIENT_ID,
             transaction_id,
             kind: TransactionKind::Deposit {
+                amount: OrderedFloat(amount as f32),
+            },
+        }
+    }
+
+    fn withdrawal(transaction_id: TransactionId, amount: u32) -> Transaction {
+        Transaction {
+            client_id: CLIENT_ID,
+            transaction_id,
+            kind: TransactionKind::Withdrawal {
                 amount: OrderedFloat(amount as f32),
             },
         }

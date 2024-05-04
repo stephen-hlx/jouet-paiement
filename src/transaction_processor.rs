@@ -48,6 +48,8 @@ impl From<AccountTransactionProcessorError> for TransactionProcessorError {
         match err {
             AccountTransactionProcessorError::MismatchTransactionKind => todo!(),
             AccountTransactionProcessorError::CannotDepositToLockedAccount => Self::AccountLocked,
+            AccountTransactionProcessorError::CannotWithdrawFromLockedAccount => todo!(),
+            AccountTransactionProcessorError::InsufficientFundForWithdrawal => todo!(),
         }
     }
 }
