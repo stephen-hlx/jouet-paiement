@@ -73,14 +73,14 @@ impl From<DepositorError> for AccountTransactionProcessorError {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use std::collections::HashMap;
 
     use ordered_float::OrderedFloat;
     use rstest::rstest;
 
     use crate::{
         account::{
-            processor::depositor::{Depositor, DepositorError},
+            processor::depositor::{mock::MockDepositor, DepositorError},
             Account, AccountSnapshot, AccountStatus, Deposit,
         },
         model::{Amount, ClientId, TransactionId},
@@ -91,54 +91,6 @@ mod tests {
         AccountTransactionProcessor, AccountTransactionProcessorError,
         SimpleAccountTransactionProcessor,
     };
-
-    // TODO: use RefCell to enhance the mock
-    struct MockDepositor {
-        expected_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
-        actual_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
-        return_vals: Rc<RefCell<Vec<Result<(), DepositorError>>>>,
-    }
-
-    impl MockDepositor {
-        fn new() -> Self {
-            Self {
-                expected_requests: Rc::new(RefCell::new(Vec::new())),
-                actual_requests: Rc::new(RefCell::new(Vec::new())),
-                return_vals: Rc::new(RefCell::new(Vec::new())),
-            }
-        }
-
-        fn expect(&self, account: &mut Account, transaction_id: TransactionId, amount: Amount) {
-            self.expected_requests
-                .borrow_mut()
-                .push((account.clone(), transaction_id, amount));
-        }
-
-        fn to_return(&self, result: Result<(), DepositorError>) {
-            self.return_vals.borrow_mut().push(result);
-        }
-    }
-
-    impl Depositor for MockDepositor {
-        fn deposit(
-            &self,
-            account: &mut Account,
-            transaction_id: TransactionId,
-            amount: Amount,
-        ) -> Result<(), DepositorError> {
-            self.actual_requests
-                .borrow_mut()
-                .push((account.clone(), transaction_id, amount));
-            self.return_vals.borrow_mut().remove(0)
-        }
-    }
-
-    impl Drop for MockDepositor {
-        fn drop(&mut self) {
-            assert_eq!(*self.actual_requests, *self.expected_requests);
-            assert!(self.return_vals.borrow().is_empty());
-        }
-    }
 
     const CLIENT_ID: ClientId = 123;
 

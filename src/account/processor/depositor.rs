@@ -42,6 +42,70 @@ impl Depositor for SimpleDepositor {
 }
 
 #[cfg(test)]
+pub(crate) mod mock {
+    use std::{cell::RefCell, rc::Rc};
+
+    use crate::{
+        account::Account,
+        model::{Amount, TransactionId},
+    };
+
+    use super::{Depositor, DepositorError};
+
+    pub(crate) struct MockDepositor {
+        expected_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
+        actual_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
+        return_vals: Rc<RefCell<Vec<Result<(), DepositorError>>>>,
+    }
+
+    impl MockDepositor {
+        pub(crate) fn new() -> Self {
+            Self {
+                expected_requests: Rc::new(RefCell::new(Vec::new())),
+                actual_requests: Rc::new(RefCell::new(Vec::new())),
+                return_vals: Rc::new(RefCell::new(Vec::new())),
+            }
+        }
+
+        pub(crate) fn expect(
+            &self,
+            account: &mut Account,
+            transaction_id: TransactionId,
+            amount: Amount,
+        ) {
+            self.expected_requests
+                .borrow_mut()
+                .push((account.clone(), transaction_id, amount));
+        }
+
+        pub(crate) fn to_return(&self, result: Result<(), DepositorError>) {
+            self.return_vals.borrow_mut().push(result);
+        }
+    }
+
+    impl Depositor for MockDepositor {
+        fn deposit(
+            &self,
+            account: &mut Account,
+            transaction_id: TransactionId,
+            amount: Amount,
+        ) -> Result<(), DepositorError> {
+            self.actual_requests
+                .borrow_mut()
+                .push((account.clone(), transaction_id, amount));
+            self.return_vals.borrow_mut().remove(0)
+        }
+    }
+
+    impl Drop for MockDepositor {
+        fn drop(&mut self) {
+            assert_eq!(*self.actual_requests, *self.expected_requests);
+            assert!(self.return_vals.borrow().is_empty());
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
