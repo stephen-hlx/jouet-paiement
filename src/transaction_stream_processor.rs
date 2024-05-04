@@ -1,7 +1,8 @@
 pub mod csv_stream_processor;
 
-use std::io;
+use std::io::Read;
 
+use async_trait::async_trait;
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use thiserror::Error;
@@ -11,8 +12,9 @@ use crate::{
     transaction_processor::{Transaction, TransactionKind, TransactionProcessorError},
 };
 
+#[async_trait]
 pub trait TransactionStreamProcessor {
-    fn process<R: io::Read>(&self, r: R) -> Result<(), TransactionStreamProcessError>;
+    async fn process(&self, r: impl Read + Send) -> Result<(), TransactionStreamProcessError>;
 }
 
 #[derive(Debug, Error)]

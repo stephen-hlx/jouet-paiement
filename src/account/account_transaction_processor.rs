@@ -16,7 +16,7 @@ pub trait AccountTransactionProcessor {
 }
 
 pub struct SimpleAccountTransactionProcessor {
-    depositor: Box<dyn Depositor>,
+    depositor: Box<dyn Depositor + Send + Sync>,
 }
 
 impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {

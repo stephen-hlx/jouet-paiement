@@ -1,4 +1,5 @@
 mod simple_transaction_processor;
+use async_trait::async_trait;
 pub use simple_transaction_processor::SimpleTransactionProcessor;
 
 use crate::{
@@ -28,8 +29,9 @@ pub enum TransactionKind {
 /// It takes in a transaction and processes it based on previously seen
 /// transactions. The transaction may be rejected if there is an error occurred
 /// during the process of it.
+#[async_trait]
 pub trait TransactionProcessor {
-    fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError>;
+    async fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError>;
 }
 
 #[derive(Debug)]

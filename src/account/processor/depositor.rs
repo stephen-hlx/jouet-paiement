@@ -43,7 +43,8 @@ impl Depositor for SimpleDepositor {
 
 #[cfg(test)]
 pub(crate) mod mock {
-    use std::{cell::RefCell, rc::Rc};
+
+    use std::sync::{Arc, Mutex};
 
     use crate::{
         account::Account,
@@ -53,17 +54,17 @@ pub(crate) mod mock {
     use super::{Depositor, DepositorError};
 
     pub(crate) struct MockDepositor {
-        expected_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
-        actual_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
-        return_vals: Rc<RefCell<Vec<Result<(), DepositorError>>>>,
+        expected_requests: Arc<Mutex<Vec<(Account, TransactionId, Amount)>>>,
+        actual_requests: Arc<Mutex<Vec<(Account, TransactionId, Amount)>>>,
+        return_vals: Arc<Mutex<Vec<Result<(), DepositorError>>>>,
     }
 
     impl MockDepositor {
         pub(crate) fn new() -> Self {
             Self {
-                expected_requests: Rc::new(RefCell::new(Vec::new())),
-                actual_requests: Rc::new(RefCell::new(Vec::new())),
-                return_vals: Rc::new(RefCell::new(Vec::new())),
+                expected_requests: Arc::new(Mutex::new(Vec::new())),
+                actual_requests: Arc::new(Mutex::new(Vec::new())),
+                return_vals: Arc::new(Mutex::new(Vec::new())),
             }
         }
 
@@ -74,12 +75,13 @@ pub(crate) mod mock {
             amount: Amount,
         ) {
             self.expected_requests
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .push((account.clone(), transaction_id, amount));
         }
 
         pub(crate) fn to_return(&self, result: Result<(), DepositorError>) {
-            self.return_vals.borrow_mut().push(result);
+            self.return_vals.lock().unwrap().push(result);
         }
     }
 
@@ -91,16 +93,20 @@ pub(crate) mod mock {
             amount: Amount,
         ) -> Result<(), DepositorError> {
             self.actual_requests
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .push((account.clone(), transaction_id, amount));
-            self.return_vals.borrow_mut().remove(0)
+            self.return_vals.lock().unwrap().remove(0)
         }
     }
 
     impl Drop for MockDepositor {
         fn drop(&mut self) {
-            assert_eq!(*self.actual_requests, *self.expected_requests);
-            assert!(self.return_vals.borrow().is_empty());
+            assert_eq!(
+                *self.actual_requests.lock().unwrap(),
+                *self.expected_requests.lock().unwrap()
+            );
+            assert!(self.return_vals.lock().unwrap().is_empty());
         }
     }
 }

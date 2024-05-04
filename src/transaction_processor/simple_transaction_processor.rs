@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use dashmap::DashMap;
 
 use super::{Transaction, TransactionProcessor, TransactionProcessorError};
@@ -8,11 +9,12 @@ use crate::{account::Account, model::ClientId};
 
 pub struct SimpleTransactionProcessor {
     accounts: Arc<DashMap<ClientId, Account>>,
-    account_transaction_processor: Box<dyn AccountTransactionProcessor>,
+    account_transaction_processor: Box<dyn AccountTransactionProcessor + 'static + Send + Sync>,
 }
 
+#[async_trait]
 impl TransactionProcessor for SimpleTransactionProcessor {
-    fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError> {
+    async fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError> {
         let client_id = transaction.client_id;
         let mut binding = self
             .accounts
@@ -29,7 +31,7 @@ impl TransactionProcessor for SimpleTransactionProcessor {
 impl SimpleTransactionProcessor {
     pub fn new(
         accounts: Arc<DashMap<ClientId, Account>>,
-        account_transaction_processor: Box<dyn AccountTransactionProcessor>,
+        account_transaction_processor: Box<dyn AccountTransactionProcessor + 'static + Send + Sync>,
     ) -> Self {
         Self {
             accounts,
@@ -81,8 +83,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn loads_account_and_processes_the_transaction() {
+    #[tokio::test]
+    async fn loads_account_and_processes_the_transaction() {
         let transaction = Transaction {
             client_id: CLIENT_ID,
             transaction_id: TRANSACTION_ID,
@@ -97,11 +99,11 @@ mod tests {
         };
         let transaction_processor =
             SimpleTransactionProcessor::new(accounts, Box::new(account_transaction_processor));
-        transaction_processor.process(transaction).unwrap();
+        transaction_processor.process(transaction).await.unwrap();
     }
 
-    #[test]
-    fn creates_account_if_it_does_not_already_exist_and_processes_the_transaction() {
+    #[tokio::test]
+    async fn creates_account_if_it_does_not_already_exist_and_processes_the_transaction() {
         let transaction = Transaction {
             client_id: CLIENT_ID,
             transaction_id: TRANSACTION_ID,
@@ -117,7 +119,7 @@ mod tests {
             accounts.clone(),
             Box::new(account_transaction_processor),
         );
-        transaction_processor.process(transaction).unwrap();
+        transaction_processor.process(transaction).await.unwrap();
         assert_eq!(
             *accounts.get(&CLIENT_ID).unwrap().value(),
             Account::active(CLIENT_ID)

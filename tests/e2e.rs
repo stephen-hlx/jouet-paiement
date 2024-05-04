@@ -14,8 +14,8 @@ use jouet_paiement::{
 };
 use ordered_float::OrderedFloat;
 
-#[test]
-fn e2e_small_input() {
+#[tokio::test]
+async fn e2e_small_input() {
     let accounts = Arc::new(DashMap::new());
     let account_transaction_processor = SimpleAccountTransactionProcessor::new();
     let transaction_consumer =
@@ -45,7 +45,10 @@ fn e2e_small_input() {
         active_account(2, snapshot(6, 0), client_2_deposits, HashMap::new()),
     );
 
-    csv_stream_processor.process(input.as_bytes()).unwrap();
+    csv_stream_processor
+        .process(input.as_bytes())
+        .await
+        .unwrap();
     assert_eq!(accounts.len(), expected_accounts.len());
     accounts.iter().for_each(|entry| {
         let key = entry.key();

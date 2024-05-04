@@ -1,5 +1,6 @@
 use std::io::Read;
 
+use async_trait::async_trait;
 use csv::Trim;
 
 use crate::transaction_processor::TransactionProcessor;
@@ -7,15 +8,16 @@ use crate::transaction_processor::TransactionProcessor;
 use super::{to_transaction, TransactionStreamProcessError, TransactionStreamProcessor};
 
 pub struct CsvStreamProcessor {
-    consumer: Box<dyn TransactionProcessor>,
+    consumer: Box<dyn TransactionProcessor + Send + Sync>,
 }
 
+#[async_trait]
 impl TransactionStreamProcessor for CsvStreamProcessor {
-    fn process<R: Read>(&self, r: R) -> Result<(), TransactionStreamProcessError> {
+    async fn process(&self, r: impl Read + Send) -> Result<(), TransactionStreamProcessError> {
         let mut rdr = csv::ReaderBuilder::new().trim(Trim::All).from_reader(r);
         for result in rdr.deserialize() {
             match result {
-                Ok(it) => self.consumer.process(to_transaction(it)?)?,
+                Ok(it) => self.consumer.process(to_transaction(it)?).await?,
                 Err(err) => {
                     return Err(TransactionStreamProcessError::ParsingError(err.to_string()))
                 }
@@ -26,16 +28,17 @@ impl TransactionStreamProcessor for CsvStreamProcessor {
 }
 
 impl CsvStreamProcessor {
-    pub fn new(consumer: Box<dyn TransactionProcessor>) -> Self {
+    pub fn new(consumer: Box<dyn TransactionProcessor + Send + Sync>) -> Self {
         Self { consumer }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::sync::{Arc, Mutex};
 
     use assert_matches::assert_matches;
+    use async_trait::async_trait;
     use ordered_float::OrderedFloat;
     use rstest::rstest;
 
@@ -50,12 +53,13 @@ mod tests {
     use super::CsvStreamProcessor;
 
     struct RecordSink {
-        records: Rc<RefCell<Vec<Transaction>>>,
+        records: Arc<Mutex<Vec<Transaction>>>,
     }
 
+    #[async_trait]
     impl TransactionProcessor for RecordSink {
-        fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError> {
-            self.records.borrow_mut().push(transaction);
+        async fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError> {
+            self.records.lock().unwrap().push(transaction);
             Ok(())
         }
     }
@@ -93,27 +97,32 @@ mod tests {
             dispute(7, 8),
             resolve(9, 10),
             chargeback(11, 12)])]
-    fn csv_parser_works(#[case] input: &str, #[case] expected: Vec<Transaction>) {
-        let records = Rc::new(RefCell::new(Vec::new()));
+    #[tokio::test]
+    async fn csv_parser_works(#[case] input: &str, #[case] expected: Vec<Transaction>) {
+        let records = Arc::new(Mutex::new(Vec::new()));
         let record_sink = RecordSink {
             records: records.clone(),
         };
         let processor = CsvStreamProcessor {
             consumer: Box::new(record_sink),
         };
-        processor.process(input.as_bytes()).unwrap();
-        assert_eq!(*records.borrow(), expected);
+        processor.process(input.as_bytes()).await.unwrap();
+        assert_eq!(*records.lock().unwrap(), expected);
     }
 
     struct Blackhole;
+    #[async_trait]
     impl TransactionProcessor for Blackhole {
-        fn process(&self, _transaction: Transaction) -> Result<(), TransactionProcessorError> {
+        async fn process(
+            &self,
+            _transaction: Transaction,
+        ) -> Result<(), TransactionProcessorError> {
             Ok(())
         }
     }
 
-    #[test]
-    fn missing_coma_for_the_optional_field_results_in_parsing_error() {
+    #[tokio::test]
+    async fn missing_coma_for_the_optional_field_results_in_parsing_error() {
         let input = "
     type,    client, tx, amount
     dispute,      7,  8";
@@ -122,7 +131,7 @@ mod tests {
             consumer: Box::new(blackhold),
         };
         assert_matches!(
-            processor.process(input.as_bytes()),
+            processor.process(input.as_bytes()).await,
             Err(TransactionStreamProcessError::ParsingError(_))
         );
     }
