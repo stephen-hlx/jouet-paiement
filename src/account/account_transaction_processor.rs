@@ -1,19 +1,25 @@
+#[cfg(test)]
+use mockall::automock;
 use mockall_double::double;
 use thiserror::Error;
 
-use crate::account::{Account, Transaction};
+use crate::{
+    account::Account,
+    transaction_processor::{Transaction, TransactionKind},
+};
 
 #[double]
-use super::processor::Depositor;
+use super::processor::depositor::Depositor;
 
-use super::processor::DepositorError;
+use super::processor::depositor::DepositorError;
 
 pub(crate) struct AccountTransactionProcessor {
     depositor: Depositor,
 }
 
+#[cfg_attr(test, automock)]
 impl AccountTransactionProcessor {
-    fn process(
+    pub(crate) fn process(
         &self,
         account: &mut Account,
         transaction: Transaction,
@@ -21,21 +27,22 @@ impl AccountTransactionProcessor {
         let Transaction {
             transaction_id,
             kind,
+            client_id: _,
         } = transaction;
         match kind {
-            super::TransactionKind::Deposit { amount } => {
+            TransactionKind::Deposit { amount } => {
                 self.depositor.deposit(account, transaction_id, amount)?
             }
-            super::TransactionKind::Withdrawal { amount } => todo!(),
-            super::TransactionKind::Dispute => todo!(),
-            super::TransactionKind::Resolve => todo!(),
-            super::TransactionKind::ChargeBack => todo!(),
+            TransactionKind::Withdrawal { amount } => todo!(),
+            TransactionKind::Dispute => todo!(),
+            TransactionKind::Resolve => todo!(),
+            TransactionKind::ChargeBack => todo!(),
         }
         Ok(())
     }
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Clone)]
 pub(crate) enum AccountTransactionProcessorError {
     /// TODO: can i provide more info here?
     #[error("Mismatch")]
@@ -62,13 +69,16 @@ mod tests {
 
     use crate::{
         account::{
-            processor::{DepositorError, MockDepositor},
-            Account, AccountSnapshot, AccountStatus, Deposit, Transaction, TransactionKind,
+            processor::depositor::{DepositorError, MockDepositor},
+            Account, AccountSnapshot, AccountStatus, Deposit,
         },
-        model::TransactionId,
+        model::{ClientId, TransactionId},
+        transaction_processor::{Transaction, TransactionKind},
     };
 
     use super::{AccountTransactionProcessor, AccountTransactionProcessorError};
+
+    const CLIENT_ID: ClientId = 123;
 
     #[test]
     fn calls_depositor_for_deposit() {
@@ -128,6 +138,7 @@ mod tests {
 
     fn deposit(transaction_id: TransactionId, amount: u32) -> Transaction {
         Transaction {
+            client_id: CLIENT_ID,
             transaction_id,
             kind: TransactionKind::Deposit {
                 amount: OrderedFloat(amount as f32),

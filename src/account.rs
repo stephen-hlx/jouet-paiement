@@ -1,4 +1,4 @@
-mod account_transaction_processor;
+pub(crate) mod account_transaction_processor;
 mod processor;
 
 use std::collections::HashMap;
@@ -17,13 +17,15 @@ use crate::transaction_processor::{
 /// consuming and a snapshot is helpful to keep track of certain key attributes
 /// of an account.
 #[derive(Debug, PartialEq)]
-struct AccountSnapshot {
+#[cfg_attr(test, derive(Clone))]
+pub(crate) struct AccountSnapshot {
     available: Amount,
     held: Amount,
 }
 
 #[derive(Debug, PartialEq)]
-enum AccountStatus {
+#[cfg_attr(test, derive(Clone))]
+pub(crate) enum AccountStatus {
     /// The account is active, and is open to transactions.
     Active,
 
@@ -33,47 +35,29 @@ enum AccountStatus {
 
 /// An account structure used to process transactions.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub(crate) struct Account {
-    client_id: ClientId,
-    status: AccountStatus,
+    pub(crate) client_id: ClientId,
+    pub(crate) status: AccountStatus,
     account_snapshot: AccountSnapshot,
     deposits: HashMap<TransactionId, Deposit>,
     withdrawals: HashMap<TransactionId, Withdrawal>,
 }
 
-/// A transaction that is ready to be processed for an account.
-#[derive(Debug, PartialEq)]
-pub(crate) struct Transaction {
-    transaction_id: TransactionId,
-    kind: TransactionKind,
-}
-
-/// The kind of transaction to be processed for an account.
-#[derive(Debug, PartialEq)]
-pub(crate) enum TransactionKind {
-    Deposit { amount: Amount },
-    Withdrawal { amount: Amount },
-    Dispute,
-    Resolve,
-    ChargeBack,
-}
-
-impl From<RawTransaction> for Transaction {
-    fn from(raw: RawTransaction) -> Self {
-        Self {
-            transaction_id: raw.transaction_id,
-            kind: match raw.kind {
-                RawTransactionKind::Deposit { amount } => TransactionKind::Deposit { amount },
-                RawTransactionKind::Withdrawal { amount } => TransactionKind::Withdrawal { amount },
-                RawTransactionKind::Dispute => TransactionKind::Dispute,
-                RawTransactionKind::Resolve => TransactionKind::Resolve,
-                RawTransactionKind::ChargeBack => TransactionKind::ChargeBack,
-            },
+impl Account {
+    pub(crate) fn active(client_id: ClientId) -> Self {
+        Account {
+            client_id,
+            status: AccountStatus::Active,
+            account_snapshot: AccountSnapshot::empty(),
+            deposits: HashMap::new(),
+            withdrawals: HashMap::new(),
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 enum DepositStatus {
     /// This is the initial state of an accepted deposit.
     Accepted,
@@ -95,12 +79,14 @@ enum DepositStatus {
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 struct Deposit {
     amount: Amount,
     status: DepositStatus,
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 enum WithdrawalStatus {
     /// This is the initial state of an accepted withdrawal.
     Accepted,
@@ -127,12 +113,14 @@ enum WithdrawalStatus {
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 struct Withdrawal {
     amount: Amount,
     status: WithdrawalStatus,
 }
 
 /// A trait that specify a storage of an account.
+/// TODO: a simple map would just work fine
 pub(crate) trait AccountStore {
     /// Get the account from the [`AccountStore`]
     fn get(&self, client_id: ClientId) -> Result<Option<Account>, AccountStoreError>;
@@ -147,8 +135,8 @@ pub(crate) trait AccountStore {
 #[derive(Debug, Error)]
 pub(crate) enum AccountStoreError {}
 
-#[cfg(test)]
 impl AccountSnapshot {
+    #[cfg(test)]
     fn new(available: i32, held: u32) -> Self {
         use ordered_float::OrderedFloat;
         AccountSnapshot {
@@ -156,7 +144,11 @@ impl AccountSnapshot {
             held: OrderedFloat(held as f32),
         }
     }
-    fn empty() -> Self {
-        Self::new(0, 0)
+    pub(crate) fn empty() -> Self {
+        use ordered_float::OrderedFloat;
+        Self {
+            available: OrderedFloat(0.0),
+            held: OrderedFloat(0.0),
+        }
     }
 }

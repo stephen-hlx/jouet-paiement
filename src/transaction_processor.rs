@@ -1,7 +1,13 @@
-use crate::model::{Amount, ClientId, TransactionId};
+mod simple_transaction_processor;
+
+use crate::{
+    account::account_transaction_processor::AccountTransactionProcessorError,
+    model::{Amount, ClientId, TransactionId},
+};
 
 /// The transaction structure accepted by this application.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub struct Transaction {
     pub client_id: ClientId,
     pub transaction_id: TransactionId,
@@ -10,6 +16,7 @@ pub struct Transaction {
 
 /// The kinds of transactions.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
 pub enum TransactionKind {
     Deposit { amount: Amount },
     Withdrawal { amount: Amount },
@@ -26,6 +33,20 @@ trait TransactionProcessor {
     fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError>;
 }
 
+#[derive(Debug)]
 pub(super) enum TransactionProcessorError {
+    // todo: need an ID
+    AccountLocked,
     InvalidTransaction(Transaction),
+
+    InternalError(String),
+}
+
+impl From<AccountTransactionProcessorError> for TransactionProcessorError {
+    fn from(err: AccountTransactionProcessorError) -> Self {
+        match err {
+            AccountTransactionProcessorError::MismatchTransactionKind => todo!(),
+            AccountTransactionProcessorError::CannotDepositToLockedAccount => Self::AccountLocked,
+        }
+    }
 }
