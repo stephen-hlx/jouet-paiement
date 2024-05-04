@@ -3,19 +3,24 @@ use crate::{
     model::{Amount, TransactionId},
 };
 
-#[cfg(test)]
-use mockall::automock;
-
 #[derive(Debug, Clone)]
 pub(crate) enum DepositorError {
     AccountLocked,
 }
 
+pub(crate) trait DepositorTrait {
+    fn deposit(
+        &self,
+        account: &mut Account,
+        transaction_id: TransactionId,
+        amount: Amount,
+    ) -> Result<(), DepositorError>;
+}
+
 pub(crate) struct Depositor;
 
-#[cfg_attr(test, automock)]
-impl Depositor {
-    pub(crate) fn deposit(
+impl DepositorTrait for Depositor {
+    fn deposit(
         &self,
         account: &mut Account,
         transaction_id: TransactionId,
@@ -55,6 +60,7 @@ mod tests {
     };
 
     use super::Depositor;
+    use super::DepositorTrait;
 
     #[rstest]
     //    |-------------------- input -----------------------------| |--------------------- output ----------------------------------|

@@ -1,16 +1,14 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use mockall_double::double;
 
 use super::{Transaction, TransactionProcessor, TransactionProcessorError};
-#[double]
-use crate::account::account_transaction_processor::AccountTransactionProcessor;
+use crate::account::account_transaction_processor::AccountTransactionProcessorTrait;
 use crate::{account::Account, model::ClientId};
 
 struct SimpleTransactionProcessor {
     accounts: Arc<DashMap<ClientId, Account>>,
-    account_transaction_processor: AccountTransactionProcessor,
+    account_transaction_processor: Box<dyn AccountTransactionProcessorTrait>,
 }
 
 impl TransactionProcessor for SimpleTransactionProcessor {
@@ -29,7 +27,7 @@ impl TransactionProcessor for SimpleTransactionProcessor {
 }
 
 impl SimpleTransactionProcessor {
-    fn new(account_transaction_processor: AccountTransactionProcessor) -> Self {
+    fn new(account_transaction_processor: Box<dyn AccountTransactionProcessorTrait>) -> Self {
         Self {
             accounts: Arc::new(DashMap::new()),
             account_transaction_processor,
@@ -39,7 +37,7 @@ impl SimpleTransactionProcessor {
     #[cfg(test)]
     fn new_for_test(
         accounts: Arc<DashMap<ClientId, Account>>,
-        account_transaction_processor: AccountTransactionProcessor,
+        account_transaction_processor: Box<dyn AccountTransactionProcessorTrait>,
     ) -> Self {
         Self {
             accounts,
@@ -53,11 +51,16 @@ mod tests {
     use std::sync::Arc;
 
     use dashmap::DashMap;
-    use mockall::predicate;
+
     use ordered_float::OrderedFloat;
 
     use crate::{
-        account::{account_transaction_processor::MockAccountTransactionProcessor, Account},
+        account::{
+            account_transaction_processor::{
+                AccountTransactionProcessorError, AccountTransactionProcessorTrait,
+            },
+            Account,
+        },
         model::{Amount, ClientId, TransactionId},
         transaction_processor::{Transaction, TransactionProcessor},
     };
@@ -67,6 +70,24 @@ mod tests {
     const CLIENT_ID: ClientId = 123;
     const TRANSACTION_ID: TransactionId = 456;
     const AMOUNT: Amount = OrderedFloat(7.89);
+
+    pub struct MockAccountTransactionProcessor {
+        expected_request: (Account, Transaction),
+        return_val: Result<(), AccountTransactionProcessorError>,
+    }
+
+    impl AccountTransactionProcessorTrait for MockAccountTransactionProcessor {
+        fn process(
+            &self,
+            account: &mut Account,
+            transaction: Transaction,
+        ) -> Result<(), AccountTransactionProcessorError> {
+            let (expected_account, expected_transaction) = self.expected_request.clone();
+            assert_eq!(*account, expected_account);
+            assert_eq!(transaction, expected_transaction);
+            self.return_val.clone()
+        }
+    }
 
     #[test]
     fn loads_account_and_processes_the_transaction() {
@@ -78,14 +99,14 @@ mod tests {
         let account = Account::active(CLIENT_ID);
         let accounts = Arc::new(DashMap::new());
         accounts.insert(CLIENT_ID, account.clone());
-        let mut account_transaction_processor = MockAccountTransactionProcessor::new();
-        account_transaction_processor
-            .expect_process()
-            .times(1)
-            .with(predicate::eq(account), predicate::eq(transaction.clone()))
-            .return_const(Ok(()));
-        let transaction_processor =
-            SimpleTransactionProcessor::new_for_test(accounts, account_transaction_processor);
+        let account_transaction_processor = MockAccountTransactionProcessor {
+            expected_request: (account.clone(), transaction.clone()),
+            return_val: Ok(()),
+        };
+        let transaction_processor = SimpleTransactionProcessor::new_for_test(
+            accounts,
+            Box::new(account_transaction_processor),
+        );
         transaction_processor.process(transaction).unwrap();
     }
 
@@ -98,15 +119,13 @@ mod tests {
         };
         let account = Account::active(CLIENT_ID);
         let accounts = Arc::new(DashMap::new());
-        let mut account_transaction_processor = MockAccountTransactionProcessor::new();
-        account_transaction_processor
-            .expect_process()
-            .times(1)
-            .with(predicate::eq(account), predicate::eq(transaction.clone()))
-            .return_const(Ok(()));
+        let account_transaction_processor = MockAccountTransactionProcessor {
+            expected_request: (account.clone(), transaction.clone()),
+            return_val: Ok(()),
+        };
         let transaction_processor = SimpleTransactionProcessor::new_for_test(
             accounts.clone(),
-            account_transaction_processor,
+            Box::new(account_transaction_processor),
         );
         transaction_processor.process(transaction).unwrap();
         assert_eq!(

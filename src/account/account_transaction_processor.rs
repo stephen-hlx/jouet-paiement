@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mockall::automock;
-use mockall_double::double;
 use thiserror::Error;
 
 use crate::{
@@ -8,16 +5,20 @@ use crate::{
     transaction_processor::{Transaction, TransactionKind},
 };
 
-#[double]
-use super::processor::depositor::Depositor;
+use super::processor::depositor::{DepositorError, DepositorTrait};
 
-use super::processor::depositor::DepositorError;
-
-pub(crate) struct AccountTransactionProcessor {
-    depositor: Depositor,
+pub(crate) trait AccountTransactionProcessorTrait {
+    fn process(
+        &self,
+        account: &mut Account,
+        transaction: Transaction,
+    ) -> Result<(), AccountTransactionProcessorError>;
 }
 
-#[cfg_attr(test, automock)]
+pub(crate) struct AccountTransactionProcessor {
+    depositor: Box<dyn DepositorTrait>,
+}
+
 impl AccountTransactionProcessor {
     pub(crate) fn process(
         &self,
@@ -69,32 +70,54 @@ mod tests {
 
     use crate::{
         account::{
-            processor::depositor::{DepositorError, MockDepositor},
+            processor::depositor::{DepositorError, DepositorTrait},
             Account, AccountSnapshot, AccountStatus, Deposit,
         },
-        model::{ClientId, TransactionId},
+        model::{Amount, ClientId, TransactionId},
         transaction_processor::{Transaction, TransactionKind},
     };
 
-    use super::{AccountTransactionProcessor, AccountTransactionProcessorError};
+    use super::{
+        AccountTransactionProcessor, AccountTransactionProcessorError,
+        AccountTransactionProcessorTrait,
+    };
+
+    struct MockDepositor {
+        expected_request: (Account, TransactionId, Amount),
+        return_val: Result<(), DepositorError>,
+    }
+
+    impl DepositorTrait for MockDepositor {
+        fn deposit(
+            &self,
+            account: &mut Account,
+            transaction_id: TransactionId,
+            _amount: Amount,
+        ) -> Result<(), DepositorError> {
+            let (expected_account, expected_transaction_id, _expected_amount) =
+                self.expected_request.clone();
+            assert_eq!(*account, expected_account);
+            assert_eq!(transaction_id, expected_transaction_id);
+            // assert_eq!(amount, expected_account);
+            self.return_val.clone()
+        }
+    }
 
     const CLIENT_ID: ClientId = 123;
 
     #[test]
     fn calls_depositor_for_deposit() {
-        let mut depositor = MockDepositor::new();
         let mut account = account(AccountStatus::Active, 0, 0, vec![]);
-        depositor
-            .expect_deposit()
-            .times(1)
-            // a little sloppy here since OrderedFloat does not work well with predicate::eq
-            // .with(
-            //     predicate::eq(account),
-            //     predicate::eq(transaction_id),
-            //     predicate::eq(amount),
-            // )
-            .return_const(Ok(()));
-        let processor = AccountTransactionProcessor { depositor };
+        let transaction_id: TransactionId = 0;
+        let amount: Amount = OrderedFloat(0.0);
+
+        let depositor = MockDepositor {
+            expected_request: (account.clone(), transaction_id, amount.clone()),
+            return_val: Ok(()),
+        };
+        let processor = AccountTransactionProcessor {
+            depositor: Box::new(depositor),
+        };
         processor.process(&mut account, deposit(0, 0)).unwrap();
     }
 
@@ -108,13 +131,18 @@ mod tests {
         #[case] depositor_error: DepositorError,
         #[case] expected_error: AccountTransactionProcessorError,
     ) {
-        let mut depositor = MockDepositor::new();
-        depositor
-            .expect_deposit()
-            .return_const(Err(depositor_error));
-        let processor = AccountTransactionProcessor { depositor };
-
         let mut account = account(AccountStatus::Active, 0, 0, vec![]);
+        let transaction_id: TransactionId = 0;
+        let amount: Amount = OrderedFloat(0.0);
+
+        let depositor = MockDepositor {
+            expected_request: (account.clone(), transaction_id, amount.clone()),
+            return_val: Err(depositor_error),
+        };
+        let processor = AccountTransactionProcessor {
+            depositor: Box::new(depositor),
+        };
+
         assert_eq!(
             processor.process(&mut account, deposit(0, 0)),
             Err(expected_error)
