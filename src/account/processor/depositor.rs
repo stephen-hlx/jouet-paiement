@@ -8,7 +8,7 @@ pub(crate) enum DepositorError {
     AccountLocked,
 }
 
-pub(crate) trait DepositorTrait {
+pub(crate) trait Depositor {
     fn deposit(
         &self,
         account: &mut Account,
@@ -17,9 +17,9 @@ pub(crate) trait DepositorTrait {
     ) -> Result<(), DepositorError>;
 }
 
-pub(crate) struct Depositor;
+pub(crate) struct SimpleDepositor;
 
-impl DepositorTrait for Depositor {
+impl Depositor for SimpleDepositor {
     fn deposit(
         &self,
         account: &mut Account,
@@ -60,7 +60,7 @@ mod tests {
     };
 
     use super::Depositor;
-    use super::DepositorTrait;
+    use super::SimpleDepositor;
 
     #[rstest]
     //    |-------------------- input -----------------------------| |--------------------- output ----------------------------------|
@@ -84,7 +84,7 @@ mod tests {
         #[case] amount_u32: u32,
         #[case] expected: Account,
     ) {
-        let depositor = Depositor;
+        let depositor = SimpleDepositor;
         depositor
             .deposit(&mut original, transaction_id, amount(amount_u32))
             .unwrap();
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn deposit_to_locked_account_returns_error() {
         let mut account = account(Locked, 0, 0, vec![]);
-        let depositor = Depositor;
+        let depositor = SimpleDepositor;
         assert_matches!(
             depositor.deposit(&mut account, 1, amount(10)),
             Err(DepositorError::AccountLocked)

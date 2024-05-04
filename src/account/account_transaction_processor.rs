@@ -5,9 +5,9 @@ use crate::{
     transaction_processor::{Transaction, TransactionKind},
 };
 
-use super::processor::depositor::{DepositorError, DepositorTrait};
+use super::processor::depositor::{Depositor, DepositorError, SimpleDepositor};
 
-pub(crate) trait AccountTransactionProcessorTrait {
+pub trait AccountTransactionProcessor {
     fn process(
         &self,
         account: &mut Account,
@@ -15,12 +15,12 @@ pub(crate) trait AccountTransactionProcessorTrait {
     ) -> Result<(), AccountTransactionProcessorError>;
 }
 
-pub(crate) struct AccountTransactionProcessor {
-    depositor: Box<dyn DepositorTrait>,
+pub struct SimpleAccountTransactionProcessor {
+    depositor: Box<dyn Depositor>,
 }
 
-impl AccountTransactionProcessor {
-    pub(crate) fn process(
+impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
+    fn process(
         &self,
         account: &mut Account,
         transaction: Transaction,
@@ -43,8 +43,18 @@ impl AccountTransactionProcessor {
     }
 }
 
+impl SimpleAccountTransactionProcessor {
+    pub fn new() -> Self {
+        let depositor = SimpleDepositor;
+
+        Self {
+            depositor: Box::new(depositor),
+        }
+    }
+}
+
 #[derive(Debug, Error, PartialEq, Clone)]
-pub(crate) enum AccountTransactionProcessorError {
+pub enum AccountTransactionProcessorError {
     /// TODO: can i provide more info here?
     #[error("Mismatch")]
     MismatchTransactionKind,
@@ -70,7 +80,7 @@ mod tests {
 
     use crate::{
         account::{
-            processor::depositor::{DepositorError, DepositorTrait},
+            processor::depositor::{Depositor, DepositorError},
             Account, AccountSnapshot, AccountStatus, Deposit,
         },
         model::{Amount, ClientId, TransactionId},
@@ -79,15 +89,16 @@ mod tests {
 
     use super::{
         AccountTransactionProcessor, AccountTransactionProcessorError,
-        AccountTransactionProcessorTrait,
+        SimpleAccountTransactionProcessor,
     };
 
+    // TODO: use RefCell to enhance the mock
     struct MockDepositor {
         expected_request: (Account, TransactionId, Amount),
         return_val: Result<(), DepositorError>,
     }
 
-    impl DepositorTrait for MockDepositor {
+    impl Depositor for MockDepositor {
         fn deposit(
             &self,
             account: &mut Account,
@@ -115,7 +126,7 @@ mod tests {
             expected_request: (account.clone(), transaction_id, amount.clone()),
             return_val: Ok(()),
         };
-        let processor = AccountTransactionProcessor {
+        let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
         };
         processor.process(&mut account, deposit(0, 0)).unwrap();
@@ -139,7 +150,7 @@ mod tests {
             expected_request: (account.clone(), transaction_id, amount.clone()),
             return_val: Err(depositor_error),
         };
-        let processor = AccountTransactionProcessor {
+        let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
         };
 

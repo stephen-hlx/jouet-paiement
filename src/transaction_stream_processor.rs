@@ -1,3 +1,5 @@
+pub mod csv_stream_processor;
+
 use std::io;
 
 use ordered_float::OrderedFloat;
@@ -6,11 +8,11 @@ use thiserror::Error;
 
 use crate::{
     model::{ClientId, TransactionId},
-    transaction_processor::{Transaction, TransactionKind},
+    transaction_processor::{Transaction, TransactionKind, TransactionProcessorError},
 };
 
-trait TransactionStreamProcessor {
-    fn process<R: io::Read>(&mut self, r: R) -> Result<(), TransactionStreamProcessError>;
+pub trait TransactionStreamProcessor {
+    fn process<R: io::Read>(&self, r: R) -> Result<(), TransactionStreamProcessError>;
 }
 
 #[derive(Debug, Error)]
@@ -47,19 +49,13 @@ pub enum TransactionRecordType {
     Chargeback,
 }
 
-mod csv_stream_processor;
-
-trait TransactionConsumer {
-    fn consume(&mut self, transaction: Transaction) -> Result<(), TransactionConsumerError>;
-}
-
-#[derive(Debug, Error)]
-#[error("Failed to consumer the `TransactionRecord` {0:?} due to {1}")]
-struct TransactionConsumerError(TransactionRecord, String);
-
-impl From<TransactionConsumerError> for TransactionStreamProcessError {
-    fn from(value: TransactionConsumerError) -> Self {
-        Self::ProcessError(value.0, value.1)
+impl From<TransactionProcessorError> for TransactionStreamProcessError {
+    fn from(err: TransactionProcessorError) -> Self {
+        match err {
+            TransactionProcessorError::AccountLocked => todo!(),
+            TransactionProcessorError::InvalidTransaction(_) => todo!(),
+            TransactionProcessorError::InternalError(_) => todo!(),
+        }
     }
 }
 

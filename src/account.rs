@@ -1,4 +1,5 @@
 pub(crate) mod account_transaction_processor;
+pub use account_transaction_processor::SimpleAccountTransactionProcessor;
 mod processor;
 
 use std::collections::HashMap;
@@ -6,9 +7,6 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::model::{Amount, ClientId, TransactionId};
-use crate::transaction_processor::{
-    Transaction as RawTransaction, TransactionKind as RawTransactionKind,
-};
 
 /// The snapshot of an account.
 /// An account consists of a series of chronologically ordered transactions
@@ -16,16 +14,14 @@ use crate::transaction_processor::{
 /// To capture the account's state, replaying all these transactions is time
 /// consuming and a snapshot is helpful to keep track of certain key attributes
 /// of an account.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub(crate) struct AccountSnapshot {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct AccountSnapshot {
     available: Amount,
     held: Amount,
 }
 
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub(crate) enum AccountStatus {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum AccountStatus {
     /// The account is active, and is open to transactions.
     Active,
 
@@ -36,7 +32,7 @@ pub(crate) enum AccountStatus {
 /// An account structure used to process transactions.
 #[derive(Debug, PartialEq)]
 #[cfg_attr(test, derive(Clone))]
-pub(crate) struct Account {
+pub struct Account {
     pub(crate) client_id: ClientId,
     pub(crate) status: AccountStatus,
     account_snapshot: AccountSnapshot,
@@ -54,11 +50,26 @@ impl Account {
             withdrawals: HashMap::new(),
         }
     }
+
+    pub fn new(
+        client_id: ClientId,
+        status: AccountStatus,
+        account_snapshot: AccountSnapshot,
+        deposits: HashMap<TransactionId, Deposit>,
+        withdrawals: HashMap<TransactionId, Withdrawal>,
+    ) -> Self {
+        Self {
+            client_id,
+            status,
+            account_snapshot,
+            deposits,
+            withdrawals,
+        }
+    }
 }
 
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-enum DepositStatus {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum DepositStatus {
     /// This is the initial state of an accepted deposit.
     Accepted,
 
@@ -78,16 +89,14 @@ enum DepositStatus {
     ChargedBack,
 }
 
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-struct Deposit {
-    amount: Amount,
-    status: DepositStatus,
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Deposit {
+    pub amount: Amount,
+    pub status: DepositStatus,
 }
 
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-enum WithdrawalStatus {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum WithdrawalStatus {
     /// This is the initial state of an accepted withdrawal.
     Accepted,
 
@@ -112,9 +121,8 @@ enum WithdrawalStatus {
     ChargedBack,
 }
 
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-struct Withdrawal {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Withdrawal {
     amount: Amount,
     status: WithdrawalStatus,
 }
@@ -136,8 +144,7 @@ pub(crate) trait AccountStore {
 pub(crate) enum AccountStoreError {}
 
 impl AccountSnapshot {
-    #[cfg(test)]
-    fn new(available: i32, held: u32) -> Self {
+    pub fn new(available: i32, held: u32) -> Self {
         use ordered_float::OrderedFloat;
         AccountSnapshot {
             available: OrderedFloat(available as f32),
@@ -145,10 +152,6 @@ impl AccountSnapshot {
         }
     }
     pub(crate) fn empty() -> Self {
-        use ordered_float::OrderedFloat;
-        Self {
-            available: OrderedFloat(0.0),
-            held: OrderedFloat(0.0),
-        }
+        Self::new(0, 0)
     }
 }

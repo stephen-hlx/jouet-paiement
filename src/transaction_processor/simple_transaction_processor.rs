@@ -3,12 +3,12 @@ use std::sync::Arc;
 use dashmap::DashMap;
 
 use super::{Transaction, TransactionProcessor, TransactionProcessorError};
-use crate::account::account_transaction_processor::AccountTransactionProcessorTrait;
+use crate::account::account_transaction_processor::AccountTransactionProcessor;
 use crate::{account::Account, model::ClientId};
 
-struct SimpleTransactionProcessor {
+pub struct SimpleTransactionProcessor {
     accounts: Arc<DashMap<ClientId, Account>>,
-    account_transaction_processor: Box<dyn AccountTransactionProcessorTrait>,
+    account_transaction_processor: Box<dyn AccountTransactionProcessor>,
 }
 
 impl TransactionProcessor for SimpleTransactionProcessor {
@@ -27,17 +27,9 @@ impl TransactionProcessor for SimpleTransactionProcessor {
 }
 
 impl SimpleTransactionProcessor {
-    fn new(account_transaction_processor: Box<dyn AccountTransactionProcessorTrait>) -> Self {
-        Self {
-            accounts: Arc::new(DashMap::new()),
-            account_transaction_processor,
-        }
-    }
-
-    #[cfg(test)]
-    fn new_for_test(
+    pub fn new(
         accounts: Arc<DashMap<ClientId, Account>>,
-        account_transaction_processor: Box<dyn AccountTransactionProcessorTrait>,
+        account_transaction_processor: Box<dyn AccountTransactionProcessor>,
     ) -> Self {
         Self {
             accounts,
@@ -57,7 +49,7 @@ mod tests {
     use crate::{
         account::{
             account_transaction_processor::{
-                AccountTransactionProcessorError, AccountTransactionProcessorTrait,
+                AccountTransactionProcessor, AccountTransactionProcessorError,
             },
             Account,
         },
@@ -76,7 +68,7 @@ mod tests {
         return_val: Result<(), AccountTransactionProcessorError>,
     }
 
-    impl AccountTransactionProcessorTrait for MockAccountTransactionProcessor {
+    impl AccountTransactionProcessor for MockAccountTransactionProcessor {
         fn process(
             &self,
             account: &mut Account,
@@ -103,10 +95,8 @@ mod tests {
             expected_request: (account.clone(), transaction.clone()),
             return_val: Ok(()),
         };
-        let transaction_processor = SimpleTransactionProcessor::new_for_test(
-            accounts,
-            Box::new(account_transaction_processor),
-        );
+        let transaction_processor =
+            SimpleTransactionProcessor::new(accounts, Box::new(account_transaction_processor));
         transaction_processor.process(transaction).unwrap();
     }
 
@@ -123,7 +113,7 @@ mod tests {
             expected_request: (account.clone(), transaction.clone()),
             return_val: Ok(()),
         };
-        let transaction_processor = SimpleTransactionProcessor::new_for_test(
+        let transaction_processor = SimpleTransactionProcessor::new(
             accounts.clone(),
             Box::new(account_transaction_processor),
         );

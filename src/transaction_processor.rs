@@ -1,4 +1,5 @@
 mod simple_transaction_processor;
+pub use simple_transaction_processor::SimpleTransactionProcessor;
 
 use crate::{
     account::account_transaction_processor::AccountTransactionProcessorError,
@@ -6,8 +7,7 @@ use crate::{
 };
 
 /// The transaction structure accepted by this application.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Transaction {
     pub client_id: ClientId,
     pub transaction_id: TransactionId,
@@ -15,8 +15,7 @@ pub struct Transaction {
 }
 
 /// The kinds of transactions.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TransactionKind {
     Deposit { amount: Amount },
     Withdrawal { amount: Amount },
@@ -29,12 +28,12 @@ pub enum TransactionKind {
 /// It takes in a transaction and processes it based on previously seen
 /// transactions. The transaction may be rejected if there is an error occurred
 /// during the process of it.
-trait TransactionProcessor {
+pub trait TransactionProcessor {
     fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError>;
 }
 
 #[derive(Debug)]
-pub(super) enum TransactionProcessorError {
+pub enum TransactionProcessorError {
     // todo: need an ID
     AccountLocked,
     InvalidTransaction(Transaction),

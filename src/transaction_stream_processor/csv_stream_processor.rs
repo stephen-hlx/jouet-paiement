@@ -2,26 +2,32 @@ use std::io::Read;
 
 use csv::Trim;
 
-use super::{
-    to_transaction, TransactionConsumer, TransactionStreamProcessError, TransactionStreamProcessor,
-};
+use crate::transaction_processor::TransactionProcessor;
 
-struct CsvStreamProcessor {
-    consumer: Box<dyn TransactionConsumer>,
+use super::{to_transaction, TransactionStreamProcessError, TransactionStreamProcessor};
+
+pub struct CsvStreamProcessor {
+    consumer: Box<dyn TransactionProcessor>,
 }
 
 impl TransactionStreamProcessor for CsvStreamProcessor {
-    fn process<R: Read>(&mut self, r: R) -> Result<(), TransactionStreamProcessError> {
+    fn process<R: Read>(&self, r: R) -> Result<(), TransactionStreamProcessError> {
         let mut rdr = csv::ReaderBuilder::new().trim(Trim::All).from_reader(r);
         for result in rdr.deserialize() {
             match result {
-                Ok(it) => self.consumer.consume(to_transaction(it)?)?,
+                Ok(it) => self.consumer.process(to_transaction(it)?)?,
                 Err(err) => {
                     return Err(TransactionStreamProcessError::ParsingError(err.to_string()))
                 }
             };
         }
         Ok(())
+    }
+}
+
+impl CsvStreamProcessor {
+    pub fn new(consumer: Box<dyn TransactionProcessor>) -> Self {
+        Self { consumer }
     }
 }
 
@@ -35,11 +41,10 @@ mod tests {
 
     use crate::{
         model::{ClientId, TransactionId},
-        transaction_processor::{Transaction, TransactionKind},
-        transaction_stream_processor::{
-            TransactionConsumer, TransactionConsumerError, TransactionStreamProcessError,
-            TransactionStreamProcessor,
+        transaction_processor::{
+            Transaction, TransactionKind, TransactionProcessor, TransactionProcessorError,
         },
+        transaction_stream_processor::{TransactionStreamProcessError, TransactionStreamProcessor},
     };
 
     use super::CsvStreamProcessor;
@@ -48,8 +53,8 @@ mod tests {
         records: Rc<RefCell<Vec<Transaction>>>,
     }
 
-    impl TransactionConsumer for RecordSink {
-        fn consume(&mut self, transaction: Transaction) -> Result<(), TransactionConsumerError> {
+    impl TransactionProcessor for RecordSink {
+        fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError> {
             self.records.borrow_mut().push(transaction);
             Ok(())
         }
@@ -93,7 +98,7 @@ mod tests {
         let record_sink = RecordSink {
             records: records.clone(),
         };
-        let mut processor = CsvStreamProcessor {
+        let processor = CsvStreamProcessor {
             consumer: Box::new(record_sink),
         };
         processor.process(input.as_bytes()).unwrap();
@@ -101,8 +106,8 @@ mod tests {
     }
 
     struct Blackhole;
-    impl TransactionConsumer for Blackhole {
-        fn consume(&mut self, _transaction: Transaction) -> Result<(), TransactionConsumerError> {
+    impl TransactionProcessor for Blackhole {
+        fn process(&self, _transaction: Transaction) -> Result<(), TransactionProcessorError> {
             Ok(())
         }
     }
@@ -113,7 +118,7 @@ mod tests {
     type,    client, tx, amount
     dispute,      7,  8";
         let blackhold = Blackhole;
-        let mut processor = CsvStreamProcessor {
+        let processor = CsvStreamProcessor {
             consumer: Box::new(blackhold),
         };
         assert_matches!(
