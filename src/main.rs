@@ -1,3 +1,6 @@
+#[cfg(test)]
+use rstest_reuse;
+
 mod account;
 mod model;
 mod transaction_processor;

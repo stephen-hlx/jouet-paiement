@@ -1,5 +1,7 @@
 mod simple_transaction_processor;
 use async_trait::async_trait;
+#[cfg(test)]
+pub use mock::{Blackhole, RecordSink};
 pub use simple_transaction_processor::SimpleTransactionProcessor;
 
 use crate::{
@@ -52,6 +54,38 @@ impl From<AccountTransactionProcessorError> for TransactionProcessorError {
             AccountTransactionProcessorError::InsufficientFundForWithdrawal => todo!(),
             AccountTransactionProcessorError::CannotDisputeAgainstLockedAccount => todo!(),
             AccountTransactionProcessorError::NoTransactionFound => todo!(),
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod mock {
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+
+    use super::{Transaction, TransactionProcessor, TransactionProcessorError};
+
+    pub struct RecordSink {
+        pub records: Arc<Mutex<Vec<Transaction>>>,
+    }
+
+    #[async_trait]
+    impl TransactionProcessor for RecordSink {
+        async fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError> {
+            self.records.lock().unwrap().push(transaction);
+            Ok(())
+        }
+    }
+
+    pub struct Blackhole;
+    #[async_trait]
+    impl TransactionProcessor for Blackhole {
+        async fn process(
+            &self,
+            _transaction: Transaction,
+        ) -> Result<(), TransactionProcessorError> {
+            Ok(())
         }
     }
 }
