@@ -73,7 +73,7 @@ impl From<DepositorError> for AccountTransactionProcessorError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     use ordered_float::OrderedFloat;
     use rstest::rstest;
@@ -94,8 +94,29 @@ mod tests {
 
     // TODO: use RefCell to enhance the mock
     struct MockDepositor {
-        expected_request: (Account, TransactionId, Amount),
-        return_val: Result<(), DepositorError>,
+        expected_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
+        actual_requests: Rc<RefCell<Vec<(Account, TransactionId, Amount)>>>,
+        return_vals: Rc<RefCell<Vec<Result<(), DepositorError>>>>,
+    }
+
+    impl MockDepositor {
+        fn new() -> Self {
+            Self {
+                expected_requests: Rc::new(RefCell::new(Vec::new())),
+                actual_requests: Rc::new(RefCell::new(Vec::new())),
+                return_vals: Rc::new(RefCell::new(Vec::new())),
+            }
+        }
+
+        fn expect(&self, account: &mut Account, transaction_id: TransactionId, amount: Amount) {
+            self.expected_requests
+                .borrow_mut()
+                .push((account.clone(), transaction_id, amount));
+        }
+
+        fn to_return(&self, result: Result<(), DepositorError>) {
+            self.return_vals.borrow_mut().push(result);
+        }
     }
 
     impl Depositor for MockDepositor {
@@ -103,14 +124,19 @@ mod tests {
             &self,
             account: &mut Account,
             transaction_id: TransactionId,
-            _amount: Amount,
+            amount: Amount,
         ) -> Result<(), DepositorError> {
-            let (expected_account, expected_transaction_id, _expected_amount) =
-                self.expected_request.clone();
-            assert_eq!(*account, expected_account);
-            assert_eq!(transaction_id, expected_transaction_id);
-            // assert_eq!(amount, expected_account);
-            self.return_val.clone()
+            self.actual_requests
+                .borrow_mut()
+                .push((account.clone(), transaction_id, amount));
+            self.return_vals.borrow_mut().remove(0)
+        }
+    }
+
+    impl Drop for MockDepositor {
+        fn drop(&mut self) {
+            assert_eq!(*self.actual_requests, *self.expected_requests);
+            assert!(self.return_vals.borrow().is_empty());
         }
     }
 
@@ -122,10 +148,9 @@ mod tests {
         let transaction_id: TransactionId = 0;
         let amount: Amount = OrderedFloat(0.0);
 
-        let depositor = MockDepositor {
-            expected_request: (account.clone(), transaction_id, amount.clone()),
-            return_val: Ok(()),
-        };
+        let depositor = MockDepositor::new();
+        depositor.expect(&mut account, transaction_id, amount);
+        depositor.to_return(Ok(()));
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
         };
@@ -146,10 +171,9 @@ mod tests {
         let transaction_id: TransactionId = 0;
         let amount: Amount = OrderedFloat(0.0);
 
-        let depositor = MockDepositor {
-            expected_request: (account.clone(), transaction_id, amount.clone()),
-            return_val: Err(depositor_error),
-        };
+        let depositor = MockDepositor::new();
+        depositor.expect(&mut account.clone(), transaction_id, amount);
+        depositor.to_return(Err(depositor_error));
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
         };
