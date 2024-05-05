@@ -57,7 +57,7 @@ async fn e2e_small_input() {
     });
 }
 
-fn snapshot(available: i32, held: u32) -> AccountSnapshot {
+fn snapshot(available: i32, held: i32) -> AccountSnapshot {
     AccountSnapshot::new(available, held)
 }
 

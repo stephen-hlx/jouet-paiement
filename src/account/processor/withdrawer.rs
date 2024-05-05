@@ -194,14 +194,14 @@ mod tests {
         );
     }
 
-    fn active(available: i32, held: u32, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
+    fn active(available: i32, held: i32, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
         account(Active, available, held, withdrawals)
     }
 
     fn account(
         status: AccountStatus,
         available: i32,
-        held: u32,
+        held: i32,
         withdrawals: Vec<(TransactionId, Withdrawal)>,
     ) -> Account {
         Account {

@@ -144,7 +144,7 @@ pub(crate) trait AccountStore {
 pub(crate) enum AccountStoreError {}
 
 impl AccountSnapshot {
-    pub fn new(available: i32, held: u32) -> Self {
+    pub fn new(available: i32, held: i32) -> Self {
         use ordered_float::OrderedFloat;
         AccountSnapshot {
             available: OrderedFloat(available as f32),

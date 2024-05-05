@@ -50,6 +50,8 @@ impl From<AccountTransactionProcessorError> for TransactionProcessorError {
             AccountTransactionProcessorError::CannotDepositToLockedAccount => Self::AccountLocked,
             AccountTransactionProcessorError::CannotWithdrawFromLockedAccount => todo!(),
             AccountTransactionProcessorError::InsufficientFundForWithdrawal => todo!(),
+            AccountTransactionProcessorError::CannotDisputeAgainstLockedAccount => todo!(),
+            AccountTransactionProcessorError::NoTransactionFound => todo!(),
         }
     }
 }

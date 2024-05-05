@@ -7,6 +7,7 @@ use crate::{
 
 use super::processor::{
     depositor::{Depositor, DepositorError, SimpleDepositor},
+    disputer::{CreditDebitDisputer, Disputer, DisputerError},
     withdrawer::{SimpleWithdrawer, Withdrawer, WithdrawerError},
 };
 
@@ -21,6 +22,7 @@ pub trait AccountTransactionProcessor {
 pub struct SimpleAccountTransactionProcessor {
     depositor: Box<dyn Depositor + Send + Sync>,
     withdrawer: Box<dyn Withdrawer + Send + Sync>,
+    disputer: Box<dyn Disputer + Send + Sync>,
 }
 
 impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
@@ -41,7 +43,7 @@ impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
             TransactionKind::Withdrawal { amount } => {
                 self.withdrawer.withdraw(account, transaction_id, amount)?
             }
-            TransactionKind::Dispute => todo!(),
+            TransactionKind::Dispute => self.disputer.dispute(account, transaction_id)?,
             TransactionKind::Resolve => todo!(),
             TransactionKind::ChargeBack => todo!(),
         }
@@ -53,10 +55,12 @@ impl SimpleAccountTransactionProcessor {
     pub fn new() -> Self {
         let depositor = SimpleDepositor;
         let withdrawer = SimpleWithdrawer;
+        let disputer = CreditDebitDisputer;
 
         Self {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
+            disputer: Box::new(disputer),
         }
     }
 }
@@ -73,6 +77,10 @@ pub enum AccountTransactionProcessorError {
     CannotWithdrawFromLockedAccount,
     #[error("There is insufficient fund in the account for the withdrawal requested.")]
     InsufficientFundForWithdrawal,
+    #[error("Disputing against a locked account is not allowed.")]
+    CannotDisputeAgainstLockedAccount,
+    #[error("The target transaction was not found.")]
+    NoTransactionFound,
 }
 
 impl From<DepositorError> for AccountTransactionProcessorError {
@@ -92,6 +100,15 @@ impl From<WithdrawerError> for AccountTransactionProcessorError {
     }
 }
 
+impl From<DisputerError> for AccountTransactionProcessorError {
+    fn from(err: DisputerError) -> Self {
+        match err {
+            DisputerError::AccountLocked => Self::CannotDisputeAgainstLockedAccount,
+            DisputerError::NoTransactionFound => Self::NoTransactionFound,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -103,6 +120,7 @@ mod tests {
         account::{
             processor::{
                 depositor::{mock::MockDepositor, DepositorError},
+                disputer::{mock::MockDisputer, DisputerError},
                 withdrawer::{mock::MockWithdrawer, WithdrawerError},
             },
             Account, AccountSnapshot, AccountStatus,
@@ -125,12 +143,14 @@ mod tests {
         let amount: Amount = OrderedFloat(0.0);
 
         let depositor = MockDepositor::new();
+        let withdrawer = MockWithdrawer::new();
+        let disputer = MockDisputer::new();
         depositor.expect(&mut account, transaction_id, amount);
         depositor.to_return(Ok(()));
-        let withdrawer = MockWithdrawer::new();
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
+            disputer: Box::new(disputer),
         };
         processor.process(&mut account, deposit(0, 0)).unwrap();
     }
@@ -149,12 +169,14 @@ mod tests {
         let amount: Amount = OrderedFloat(0.0);
 
         let depositor = MockDepositor::new();
+        let withdrawer = MockWithdrawer::new();
+        let disputer = MockDisputer::new();
         depositor.expect(&mut account.clone(), transaction_id, amount);
         depositor.to_return(Err(depositor_error));
-        let withdrawer = MockWithdrawer::new();
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
+            disputer: Box::new(disputer),
         };
 
         assert_eq!(
@@ -171,11 +193,13 @@ mod tests {
 
         let depositor = MockDepositor::new();
         let withdrawer = MockWithdrawer::new();
+        let disputer = MockDisputer::new();
         withdrawer.expect(&mut account, transaction_id, amount);
         withdrawer.to_return(Ok(()));
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
+            disputer: Box::new(disputer),
         };
         processor.process(&mut account, withdrawal(0, 0)).unwrap();
     }
@@ -199,15 +223,68 @@ mod tests {
 
         let depositor = MockDepositor::new();
         let withdrawer = MockWithdrawer::new();
+        let disputer = MockDisputer::new();
         withdrawer.expect(&mut account.clone(), transaction_id, amount);
         withdrawer.to_return(Err(withdrawer_error));
         let processor = SimpleAccountTransactionProcessor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
+            disputer: Box::new(disputer),
         };
 
         assert_eq!(
             processor.process(&mut account, withdrawal(0, 0)),
+            Err(expected_error)
+        );
+    }
+
+    #[test]
+    fn calls_disputer_for_withdrawal() {
+        let mut account = some_account();
+        let transaction_id: TransactionId = 0;
+
+        let depositor = MockDepositor::new();
+        let withdrawer = MockWithdrawer::new();
+        let disputer = MockDisputer::new();
+        disputer.expect(&mut account, transaction_id);
+        disputer.to_return(Ok(()));
+        let processor = SimpleAccountTransactionProcessor {
+            depositor: Box::new(depositor),
+            withdrawer: Box::new(withdrawer),
+            disputer: Box::new(disputer),
+        };
+        processor.process(&mut account, dispute(0)).unwrap();
+    }
+
+    #[rstest]
+    #[case(
+        DisputerError::AccountLocked,
+        AccountTransactionProcessorError::CannotDisputeAgainstLockedAccount
+    )]
+    #[case(
+        DisputerError::NoTransactionFound,
+        AccountTransactionProcessorError::NoTransactionFound
+    )]
+    fn error_returned_from_disputer_is_propagated(
+        #[case] disputer_error: DisputerError,
+        #[case] expected_error: AccountTransactionProcessorError,
+    ) {
+        let mut account = some_account();
+        let transaction_id: TransactionId = 0;
+
+        let depositor = MockDepositor::new();
+        let withdrawer = MockWithdrawer::new();
+        let disputer = MockDisputer::new();
+        disputer.expect(&mut account.clone(), transaction_id);
+        disputer.to_return(Err(disputer_error));
+        let processor = SimpleAccountTransactionProcessor {
+            depositor: Box::new(depositor),
+            withdrawer: Box::new(withdrawer),
+            disputer: Box::new(disputer),
+        };
+
+        assert_eq!(
+            processor.process(&mut account, dispute(0)),
             Err(expected_error)
         );
     }
@@ -239,6 +316,14 @@ mod tests {
             kind: TransactionKind::Withdrawal {
                 amount: OrderedFloat(amount as f32),
             },
+        }
+    }
+
+    fn dispute(transaction_id: TransactionId) -> Transaction {
+        Transaction {
+            client_id: CLIENT_ID,
+            transaction_id,
+            kind: TransactionKind::Dispute,
         }
     }
 }
