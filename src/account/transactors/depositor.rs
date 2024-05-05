@@ -121,7 +121,7 @@ mod tests {
 
     use crate::{
         account::{
-            processor::depositor::DepositorError,
+            transactors::depositor::DepositorError,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
             Deposit, DepositStatus,

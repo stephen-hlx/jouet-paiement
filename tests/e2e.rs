@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use jouet_paiement::{
     account::{
         Account, AccountSnapshot, AccountStatus::Active, Deposit, DepositStatus::Accepted,
-        SimpleAccountTransactionProcessor, Withdrawal,
+        SimpleAccountTransactor, Withdrawal,
     },
     model::{ClientId, TransactionId},
     transaction_processor::SimpleTransactionProcessor,
@@ -17,7 +17,7 @@ use ordered_float::OrderedFloat;
 #[tokio::test]
 async fn e2e_small_input() {
     let accounts = Arc::new(DashMap::new());
-    let account_transaction_processor = SimpleAccountTransactionProcessor::new();
+    let account_transaction_processor = SimpleAccountTransactor::new();
     let transaction_consumer =
         SimpleTransactionProcessor::new(accounts.clone(), Box::new(account_transaction_processor));
     let csv_stream_processor = CsvStreamProcessor::new(Box::new(transaction_consumer));

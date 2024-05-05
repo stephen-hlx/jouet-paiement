@@ -1,6 +1,6 @@
-pub(crate) mod account_transaction_processor;
-pub use account_transaction_processor::SimpleAccountTransactionProcessor;
-mod processor;
+pub(crate) mod account_transactor;
+pub use account_transactor::SimpleAccountTransactor;
+mod transactors;
 
 use std::collections::HashMap;
 

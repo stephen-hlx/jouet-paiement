@@ -5,28 +5,28 @@ use crate::{
     transaction_processor::{Transaction, TransactionKind},
 };
 
-use super::processor::{
+use super::transactors::{
     depositor::{Depositor, DepositorError, SimpleDepositor},
     disputer::{CreditDebitDisputer, Disputer, DisputerError},
     withdrawer::{SimpleWithdrawer, Withdrawer, WithdrawerError},
 };
 
-pub trait AccountTransactionProcessor {
-    fn process(
+pub trait AccountTransactor {
+    fn transact(
         &self,
         account: &mut Account,
         transaction: Transaction,
     ) -> Result<(), AccountTransactionProcessorError>;
 }
 
-pub struct SimpleAccountTransactionProcessor {
+pub struct SimpleAccountTransactor {
     depositor: Box<dyn Depositor + Send + Sync>,
     withdrawer: Box<dyn Withdrawer + Send + Sync>,
     disputer: Box<dyn Disputer + Send + Sync>,
 }
 
-impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
-    fn process(
+impl AccountTransactor for SimpleAccountTransactor {
+    fn transact(
         &self,
         account: &mut Account,
         transaction: Transaction,
@@ -51,7 +51,7 @@ impl AccountTransactionProcessor for SimpleAccountTransactionProcessor {
     }
 }
 
-impl SimpleAccountTransactionProcessor {
+impl SimpleAccountTransactor {
     pub fn new() -> Self {
         let depositor = SimpleDepositor;
         let withdrawer = SimpleWithdrawer;
@@ -118,7 +118,7 @@ mod tests {
 
     use crate::{
         account::{
-            processor::{
+            transactors::{
                 depositor::{mock::MockDepositor, DepositorError},
                 disputer::{mock::MockDisputer, DisputerError},
                 withdrawer::{mock::MockWithdrawer, WithdrawerError},
@@ -129,10 +129,7 @@ mod tests {
         transaction_processor::{Transaction, TransactionKind},
     };
 
-    use super::{
-        AccountTransactionProcessor, AccountTransactionProcessorError,
-        SimpleAccountTransactionProcessor,
-    };
+    use super::{AccountTransactionProcessorError, AccountTransactor, SimpleAccountTransactor};
 
     const CLIENT_ID: ClientId = 123;
 
@@ -147,12 +144,12 @@ mod tests {
         let disputer = MockDisputer::new();
         depositor.expect(&mut account, transaction_id, amount);
         depositor.to_return(Ok(()));
-        let processor = SimpleAccountTransactionProcessor {
+        let processor = SimpleAccountTransactor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
             disputer: Box::new(disputer),
         };
-        processor.process(&mut account, deposit(0, 0)).unwrap();
+        processor.transact(&mut account, deposit(0, 0)).unwrap();
     }
 
     #[rstest]
@@ -173,14 +170,14 @@ mod tests {
         let disputer = MockDisputer::new();
         depositor.expect(&mut account.clone(), transaction_id, amount);
         depositor.to_return(Err(depositor_error));
-        let processor = SimpleAccountTransactionProcessor {
+        let processor = SimpleAccountTransactor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
             disputer: Box::new(disputer),
         };
 
         assert_eq!(
-            processor.process(&mut account, deposit(0, 0)),
+            processor.transact(&mut account, deposit(0, 0)),
             Err(expected_error)
         );
     }
@@ -196,12 +193,12 @@ mod tests {
         let disputer = MockDisputer::new();
         withdrawer.expect(&mut account, transaction_id, amount);
         withdrawer.to_return(Ok(()));
-        let processor = SimpleAccountTransactionProcessor {
+        let processor = SimpleAccountTransactor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
             disputer: Box::new(disputer),
         };
-        processor.process(&mut account, withdrawal(0, 0)).unwrap();
+        processor.transact(&mut account, withdrawal(0, 0)).unwrap();
     }
 
     #[rstest]
@@ -226,14 +223,14 @@ mod tests {
         let disputer = MockDisputer::new();
         withdrawer.expect(&mut account.clone(), transaction_id, amount);
         withdrawer.to_return(Err(withdrawer_error));
-        let processor = SimpleAccountTransactionProcessor {
+        let processor = SimpleAccountTransactor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
             disputer: Box::new(disputer),
         };
 
         assert_eq!(
-            processor.process(&mut account, withdrawal(0, 0)),
+            processor.transact(&mut account, withdrawal(0, 0)),
             Err(expected_error)
         );
     }
@@ -248,12 +245,12 @@ mod tests {
         let disputer = MockDisputer::new();
         disputer.expect(&mut account, transaction_id);
         disputer.to_return(Ok(()));
-        let processor = SimpleAccountTransactionProcessor {
+        let processor = SimpleAccountTransactor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
             disputer: Box::new(disputer),
         };
-        processor.process(&mut account, dispute(0)).unwrap();
+        processor.transact(&mut account, dispute(0)).unwrap();
     }
 
     #[rstest]
@@ -277,14 +274,14 @@ mod tests {
         let disputer = MockDisputer::new();
         disputer.expect(&mut account.clone(), transaction_id);
         disputer.to_return(Err(disputer_error));
-        let processor = SimpleAccountTransactionProcessor {
+        let processor = SimpleAccountTransactor {
             depositor: Box::new(depositor),
             withdrawer: Box::new(withdrawer),
             disputer: Box::new(disputer),
         };
 
         assert_eq!(
-            processor.process(&mut account, dispute(0)),
+            processor.transact(&mut account, dispute(0)),
             Err(expected_error)
         );
     }

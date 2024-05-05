@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 
 use super::{Transaction, TransactionProcessor, TransactionProcessorError};
-use crate::account::account_transaction_processor::AccountTransactionProcessor;
+use crate::account::account_transactor::AccountTransactor;
 use crate::{account::Account, model::ClientId};
 
 pub struct SimpleTransactionProcessor {
     accounts: Arc<DashMap<ClientId, Account>>,
-    account_transaction_processor: Box<dyn AccountTransactionProcessor + 'static + Send + Sync>,
+    account_transaction_processor: Box<dyn AccountTransactor + 'static + Send + Sync>,
 }
 
 #[async_trait]
@@ -23,7 +23,7 @@ impl TransactionProcessor for SimpleTransactionProcessor {
         let account = binding.value_mut();
 
         self.account_transaction_processor
-            .process(account, transaction)?;
+            .transact(account, transaction)?;
         Ok(())
     }
 }
@@ -31,7 +31,7 @@ impl TransactionProcessor for SimpleTransactionProcessor {
 impl SimpleTransactionProcessor {
     pub fn new(
         accounts: Arc<DashMap<ClientId, Account>>,
-        account_transaction_processor: Box<dyn AccountTransactionProcessor + 'static + Send + Sync>,
+        account_transaction_processor: Box<dyn AccountTransactor + 'static + Send + Sync>,
     ) -> Self {
         Self {
             accounts,
@@ -50,9 +50,7 @@ mod tests {
 
     use crate::{
         account::{
-            account_transaction_processor::{
-                AccountTransactionProcessor, AccountTransactionProcessorError,
-            },
+            account_transactor::{AccountTransactionProcessorError, AccountTransactor},
             Account,
         },
         model::{Amount, ClientId, TransactionId},
@@ -70,8 +68,8 @@ mod tests {
         return_val: Result<(), AccountTransactionProcessorError>,
     }
 
-    impl AccountTransactionProcessor for MockAccountTransactionProcessor {
-        fn process(
+    impl AccountTransactor for MockAccountTransactionProcessor {
+        fn transact(
             &self,
             account: &mut Account,
             transaction: Transaction,

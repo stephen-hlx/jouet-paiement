@@ -125,7 +125,7 @@ mod tests {
 
     use crate::{
         account::{
-            processor::withdrawer::WithdrawerError,
+            transactors::withdrawer::WithdrawerError,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
             Withdrawal, WithdrawalStatus,

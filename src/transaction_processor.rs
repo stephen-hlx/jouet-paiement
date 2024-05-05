@@ -5,7 +5,7 @@ pub use mock::{Blackhole, RecordSink};
 pub use simple_transaction_processor::SimpleTransactionProcessor;
 
 use crate::{
-    account::account_transaction_processor::AccountTransactionProcessorError,
+    account::account_transactor::AccountTransactionProcessorError,
     model::{Amount, ClientId, TransactionId},
 };
 

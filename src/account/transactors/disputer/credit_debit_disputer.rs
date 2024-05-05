@@ -53,7 +53,7 @@ mod tests {
 
     use crate::{
         account::{
-            processor::disputer::DisputerError,
+            transactors::disputer::DisputerError,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
             Deposit, DepositStatus, Withdrawal, WithdrawalStatus,
