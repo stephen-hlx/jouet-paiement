@@ -4,7 +4,7 @@ use async_trait::async_trait;
 pub use mock::{Blackhole, RecordSink};
 pub use simple_transaction_processor::SimpleTransactionProcessor;
 
-use crate::{account::account_transactor::AccountTransactionProcessorError, model::Transaction};
+use crate::{account::account_transactor::AccountTransactorError, model::Transaction};
 
 /// The transction processor.
 /// It takes in a transaction and processes it based on previously seen
@@ -24,17 +24,17 @@ pub enum TransactionProcessorError {
     InternalError(String),
 }
 
-impl From<AccountTransactionProcessorError> for TransactionProcessorError {
-    fn from(err: AccountTransactionProcessorError) -> Self {
+impl From<AccountTransactorError> for TransactionProcessorError {
+    fn from(err: AccountTransactorError) -> Self {
         match err {
-            AccountTransactionProcessorError::MismatchTransactionKind => todo!(),
-            AccountTransactionProcessorError::CannotDepositToLockedAccount => Self::AccountLocked,
-            AccountTransactionProcessorError::CannotWithdrawFromLockedAccount => todo!(),
-            AccountTransactionProcessorError::InsufficientFundForWithdrawal => todo!(),
-            AccountTransactionProcessorError::CannotDisputeAgainstLockedAccount => todo!(),
-            AccountTransactionProcessorError::NoTransactionFound => todo!(),
-            AccountTransactionProcessorError::CannotResolveLockedAccount => todo!(),
-            AccountTransactionProcessorError::CannotResolveNonDisputedTransaction(_) => todo!(),
+            AccountTransactorError::MismatchTransactionKind => todo!(),
+            AccountTransactorError::CannotDepositToLockedAccount => Self::AccountLocked,
+            AccountTransactorError::CannotWithdrawFromLockedAccount => todo!(),
+            AccountTransactorError::InsufficientFundForWithdrawal => todo!(),
+            AccountTransactorError::CannotDisputeAgainstLockedAccount => todo!(),
+            AccountTransactorError::NoTransactionFound => todo!(),
+            AccountTransactorError::CannotResolveLockedAccount => todo!(),
+            AccountTransactorError::CannotResolveNonDisputedTransaction(_) => todo!(),
         }
     }
 }

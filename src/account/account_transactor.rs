@@ -17,7 +17,7 @@ pub trait AccountTransactor {
         &self,
         account: &mut Account,
         transaction: Transaction,
-    ) -> Result<(), AccountTransactionProcessorError>;
+    ) -> Result<(), AccountTransactorError>;
 }
 
 pub struct SimpleAccountTransactor {
@@ -32,7 +32,7 @@ impl AccountTransactor for SimpleAccountTransactor {
         &self,
         account: &mut Account,
         transaction: Transaction,
-    ) -> Result<(), AccountTransactionProcessorError> {
+    ) -> Result<(), AccountTransactorError> {
         let Transaction {
             transaction_id,
             kind,
@@ -72,7 +72,7 @@ impl SimpleAccountTransactor {
 /// TODO: collapse them into a general one that carries the internal error
 /// from each processor.
 #[derive(Debug, Error, PartialEq, Clone)]
-pub enum AccountTransactionProcessorError {
+pub enum AccountTransactorError {
     /// TODO: can i provide more info here?
     #[error("Mismatch")]
     MismatchTransactionKind,
@@ -93,7 +93,7 @@ pub enum AccountTransactionProcessorError {
     CannotResolveNonDisputedTransaction(TransactionId),
 }
 
-impl From<DepositorError> for AccountTransactionProcessorError {
+impl From<DepositorError> for AccountTransactorError {
     fn from(err: DepositorError) -> Self {
         match err {
             DepositorError::AccountLocked => Self::CannotDepositToLockedAccount,
@@ -101,7 +101,7 @@ impl From<DepositorError> for AccountTransactionProcessorError {
     }
 }
 
-impl From<WithdrawerError> for AccountTransactionProcessorError {
+impl From<WithdrawerError> for AccountTransactorError {
     fn from(err: WithdrawerError) -> Self {
         match err {
             WithdrawerError::AccountLocked => Self::CannotWithdrawFromLockedAccount,
@@ -110,7 +110,7 @@ impl From<WithdrawerError> for AccountTransactionProcessorError {
     }
 }
 
-impl From<DisputerError> for AccountTransactionProcessorError {
+impl From<DisputerError> for AccountTransactorError {
     fn from(err: DisputerError) -> Self {
         match err {
             DisputerError::AccountLocked => Self::CannotDisputeAgainstLockedAccount,
@@ -119,7 +119,7 @@ impl From<DisputerError> for AccountTransactionProcessorError {
     }
 }
 
-impl From<ResolverError> for AccountTransactionProcessorError {
+impl From<ResolverError> for AccountTransactorError {
     fn from(err: ResolverError) -> Self {
         match err {
             ResolverError::AccountLocked => Self::CannotResolveLockedAccount,
@@ -151,7 +151,7 @@ mod tests {
         model::{Amount, ClientId, Transaction, TransactionId, TransactionKind},
     };
 
-    use super::{AccountTransactionProcessorError, AccountTransactor, SimpleAccountTransactor};
+    use super::{AccountTransactor, AccountTransactorError, SimpleAccountTransactor};
 
     impl SimpleAccountTransactor {
         fn new_for_test(
@@ -190,11 +190,11 @@ mod tests {
     #[rstest]
     #[case(
         DepositorError::AccountLocked,
-        AccountTransactionProcessorError::CannotDepositToLockedAccount
+        AccountTransactorError::CannotDepositToLockedAccount
     )]
     fn error_returned_from_depositor_is_propagated(
         #[case] depositor_error: DepositorError,
-        #[case] expected_error: AccountTransactionProcessorError,
+        #[case] expected_error: AccountTransactorError,
     ) {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;
@@ -235,15 +235,15 @@ mod tests {
     #[rstest]
     #[case(
         WithdrawerError::AccountLocked,
-        AccountTransactionProcessorError::CannotWithdrawFromLockedAccount
+        AccountTransactorError::CannotWithdrawFromLockedAccount
     )]
     #[case(
         WithdrawerError::InsufficientFund,
-        AccountTransactionProcessorError::InsufficientFundForWithdrawal
+        AccountTransactorError::InsufficientFundForWithdrawal
     )]
     fn error_returned_from_withdrawer_is_propagated(
         #[case] withdrawer_error: WithdrawerError,
-        #[case] expected_error: AccountTransactionProcessorError,
+        #[case] expected_error: AccountTransactorError,
     ) {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;
@@ -283,15 +283,15 @@ mod tests {
     #[rstest]
     #[case(
         DisputerError::AccountLocked,
-        AccountTransactionProcessorError::CannotDisputeAgainstLockedAccount
+        AccountTransactorError::CannotDisputeAgainstLockedAccount
     )]
     #[case(
         DisputerError::NoTransactionFound,
-        AccountTransactionProcessorError::NoTransactionFound
+        AccountTransactorError::NoTransactionFound
     )]
     fn error_returned_from_disputer_is_propagated(
         #[case] disputer_error: DisputerError,
-        #[case] expected_error: AccountTransactionProcessorError,
+        #[case] expected_error: AccountTransactorError,
     ) {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;
@@ -330,19 +330,19 @@ mod tests {
     #[rstest]
     #[case(
         ResolverError::AccountLocked,
-        AccountTransactionProcessorError::CannotResolveLockedAccount
+        AccountTransactorError::CannotResolveLockedAccount
     )]
     #[case(
         ResolverError::NoTransactionFound,
-        AccountTransactionProcessorError::NoTransactionFound
+        AccountTransactorError::NoTransactionFound
     )]
     #[case(
         ResolverError::CannotResoveNonDisputedTransaction(0),
-        AccountTransactionProcessorError::CannotResolveNonDisputedTransaction(0)
+        AccountTransactorError::CannotResolveNonDisputedTransaction(0)
     )]
     fn error_returned_from_resolver_is_propagated(
         #[case] disputer_error: ResolverError,
-        #[case] expected_error: AccountTransactionProcessorError,
+        #[case] expected_error: AccountTransactorError,
     ) {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;

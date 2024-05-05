@@ -51,7 +51,7 @@ mod tests {
 
     use crate::{
         account::{
-            account_transactor::{AccountTransactionProcessorError, AccountTransactor},
+            account_transactor::{AccountTransactor, AccountTransactorError},
             Account,
         },
         model::{Amount, ClientId, Transaction, TransactionId, TransactionKind},
@@ -66,7 +66,7 @@ mod tests {
 
     pub struct MockAccountTransactionProcessor {
         expected_request: (Account, Transaction),
-        return_val: Result<(), AccountTransactionProcessorError>,
+        return_val: Result<(), AccountTransactorError>,
     }
 
     impl AccountTransactor for MockAccountTransactionProcessor {
@@ -74,7 +74,7 @@ mod tests {
             &self,
             account: &mut Account,
             transaction: Transaction,
-        ) -> Result<(), AccountTransactionProcessorError> {
+        ) -> Result<(), AccountTransactorError> {
             let (expected_account, expected_transaction) = self.expected_request.clone();
             assert_eq!(*account, expected_account);
             assert_eq!(transaction, expected_transaction);
