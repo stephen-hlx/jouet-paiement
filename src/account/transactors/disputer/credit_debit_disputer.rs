@@ -66,6 +66,7 @@ mod tests {
 
     #[rstest]
     #[rustfmt::skip(case)]
+    // disputing credit transactions
     //    |------------------ input ------------------------------| |-------------- output ------------------------|
     //                                                           tx
     //     original_account,                                     id,   expected_account
@@ -74,6 +75,8 @@ mod tests {
     #[case(active( 7,    0, vec![(0, held_dep(3))],      vec![]), 0,  active( 7,    0, vec![(0, held_dep(3))],      vec![]))]
     #[case(active( 7,    0, vec![(0, resolved_dep(3))],  vec![]), 0,  active( 7,    0, vec![(0, resolved_dep(3))],  vec![]))]
     #[case(active( 7,    0, vec![(0, chrgd_bck_dep(3))], vec![]), 0,  active( 7,    0, vec![(0, chrgd_bck_dep(3))], vec![]))]
+    #[case(active( 3,    0, vec![(0, accepted_dep(7))],  vec![]), 0,  active(-4,    7, vec![(0, held_dep(7))],      vec![]))]
+    // disputing debit transactions
     //    |------------------ input ------------------------------| |-------------- output ------------------------|
     //                                                           tx
     //     original_account,                                     id,   expected_account

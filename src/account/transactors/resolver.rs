@@ -1,9 +1,12 @@
 mod credit_debit_resolver;
+mod credit_resolver;
 use crate::{account::Account, model::TransactionId};
+pub(crate) use credit_debit_resolver::CreditDebitResolver;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ResolverError {
     AccountLocked,
+    CannotResoveNonDisputedTransaction(TransactionId),
     NoTransactionFound,
 }
 

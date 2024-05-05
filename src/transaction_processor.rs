@@ -33,6 +33,8 @@ impl From<AccountTransactionProcessorError> for TransactionProcessorError {
             AccountTransactionProcessorError::InsufficientFundForWithdrawal => todo!(),
             AccountTransactionProcessorError::CannotDisputeAgainstLockedAccount => todo!(),
             AccountTransactionProcessorError::NoTransactionFound => todo!(),
+            AccountTransactionProcessorError::CannotResolveLockedAccount => todo!(),
+            AccountTransactionProcessorError::CannotResolveNonDisputedTransaction(_) => todo!(),
         }
     }
 }

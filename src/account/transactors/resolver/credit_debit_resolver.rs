@@ -15,29 +15,39 @@ impl Resolver for CreditDebitResolver {
     ) -> Result<(), ResolverError> {
         if let Some(deposit) = account.deposits.get_mut(&transaction_id) {
             match deposit.status {
-                DepositStatus::Accepted => {
+                DepositStatus::Held => {
                     if account.status == AccountStatus::Locked {
                         return Err(ResolverError::AccountLocked);
                     }
-                    account.account_snapshot.available -= deposit.amount;
-                    account.account_snapshot.held += deposit.amount;
-                    deposit.status = DepositStatus::Held;
+                    account.account_snapshot.available += deposit.amount;
+                    account.account_snapshot.held -= deposit.amount;
+                    deposit.status = DepositStatus::Resolved;
                     return Ok(());
                 }
-                _ => return Ok(()),
+                DepositStatus::Resolved => return Ok(()),
+                _ => {
+                    return Err(ResolverError::CannotResoveNonDisputedTransaction(
+                        transaction_id,
+                    ))
+                }
             }
         } else if let Some(withdrawal) = account.withdrawals.get_mut(&transaction_id) {
             match withdrawal.status {
-                WithdrawalStatus::Accepted => {
+                WithdrawalStatus::Held => {
                     if account.status == AccountStatus::Locked {
                         return Err(ResolverError::AccountLocked);
                     }
-                    withdrawal.status = WithdrawalStatus::Held;
-                    account.account_snapshot.available += withdrawal.amount;
-                    account.account_snapshot.held -= withdrawal.amount;
+                    account.account_snapshot.available -= withdrawal.amount;
+                    account.account_snapshot.held += withdrawal.amount;
+                    withdrawal.status = WithdrawalStatus::Resolved;
                     return Ok(());
                 }
-                _ => return Ok(()),
+                WithdrawalStatus::Resolved => return Ok(()),
+                _ => {
+                    return Err(ResolverError::CannotResoveNonDisputedTransaction(
+                        transaction_id,
+                    ))
+                }
             }
         }
         Err(ResolverError::NoTransactionFound)
@@ -66,23 +76,20 @@ mod tests {
 
     #[rstest]
     #[rustfmt::skip(case)]
+    // disputing credit transactions
     //    |------------------ input ------------------------------| |-------------- output ------------------------|
     //                                                           tx
     //     original_account,                                     id,   expected_account
     //         avail, held, deposits,                 withdraws,          avail, held, deposits,               withdrawals
-    #[case(active( 7,    0, vec![(0, accepted_dep(3))],  vec![]), 0,  active( 4,    3, vec![(0, held_dep(3))],      vec![]))]
-    #[case(active( 7,    0, vec![(0, held_dep(3))],      vec![]), 0,  active( 7,    0, vec![(0, held_dep(3))],      vec![]))]
+    #[case(active( 7,    5, vec![(0, held_dep(3))],      vec![]), 0,  active(10,    2, vec![(0, resolved_dep(3))],  vec![]))]
     #[case(active( 7,    0, vec![(0, resolved_dep(3))],  vec![]), 0,  active( 7,    0, vec![(0, resolved_dep(3))],  vec![]))]
-    #[case(active( 7,    0, vec![(0, chrgd_bck_dep(3))], vec![]), 0,  active( 7,    0, vec![(0, chrgd_bck_dep(3))], vec![]))]
+    // disputing debit transactions
     //    |------------------ input ------------------------------| |-------------- output ------------------------|
     //                                                           tx
     //     original_account,                                     id,   expected_account
     //         avail, held, deposits, withdraws,                         avail,  held, deposits, withdrawals
-    #[case(active( 7,    3, vec![], vec![(0, accepted_wdr(3))]),  0,  active(10,    0, vec![], vec![(0, held_wdr(3))])     )]
-    #[case(active( 7,    0, vec![], vec![(0, accepted_wdr(3))]),  0,  active(10,   -3, vec![], vec![(0, held_wdr(3))])     )]
-    #[case(active( 7,    0, vec![], vec![(0, held_wdr(3))]),      0,  active( 7,    0, vec![], vec![(0, held_wdr(3))])     )]
+    #[case(active( 7,    5, vec![], vec![(0, held_wdr(3))]),      0,  active( 4,    8, vec![], vec![(0, resolved_wdr(3))]) )]
     #[case(active( 7,    0, vec![], vec![(0, resolved_wdr(3))]),  0,  active( 7,    0, vec![], vec![(0, resolved_wdr(3))]) )]
-    #[case(active( 7,    0, vec![], vec![(0, chrgd_bck_wdr(3))]), 0,  active( 7,    0, vec![], vec![(0, chrgd_bck_wdr(3))]))]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
@@ -91,6 +98,27 @@ mod tests {
         let resolver = CreditDebitResolver;
         resolver.resolve(&mut original, transaction_id).unwrap();
         assert_eq!(original, expected);
+    }
+
+    #[rstest]
+    #[rustfmt::skip(case)]
+    // disputing credit transactions
+    //     original_account,                                     tx
+    //        avail, held, deposits,                 withdraws,  id,
+    #[case(active(0,    0, vec![(0, accepted_dep(3))],  vec![]), 0)]
+    #[case(active(0,    0, vec![(0, chrgd_bck_dep(3))], vec![]), 0)]
+    // disputing debit transactions
+    //    |------------------ input ------------------------------|
+    //     original_account,                                     tx
+    //        avail, held, deposits, withdraws,                  id,
+    #[case(active(0,    0, vec![], vec![(0, accepted_wdr(3))]),  0,)]
+    #[case(active(0,    0, vec![], vec![(0, chrgd_bck_wdr(3))]), 0,)]
+    fn non_resolvable_cases(#[case] mut original: Account, #[case] transaction_id: TransactionId) {
+        let resolver = CreditDebitResolver;
+        assert_matches!(
+            resolver.resolve(&mut original, transaction_id),
+            Err(ResolverError::CannotResoveNonDisputedTransaction(0))
+        );
     }
 
     #[test]
@@ -111,15 +139,11 @@ mod tests {
     #[rstest]
     //    |---------------------------- input -------------------------------| |------------ output -------------------|
     //            deposits,                    withdrawals,                 tx, result
-    #[case(locked(vec![(1, accepted_dep(2))],  vec![(3, accepted_wdr(4))]),  0, Err(ResolverError::NoTransactionFound))]
-    #[case(locked(vec![(1, accepted_dep(2))],  vec![(3, accepted_wdr(4))]),  1, Err(ResolverError::AccountLocked)     )]
-    #[case(locked(vec![(1, accepted_dep(2))],  vec![(3, accepted_wdr(4))]),  3, Err(ResolverError::AccountLocked)     )]
-    #[case(locked(vec![(1, held_dep(2))],      vec![(3, held_wdr(4))]),      1, Ok(())                                )]
-    #[case(locked(vec![(1, held_dep(2))],      vec![(3, held_wdr(4))]),      3, Ok(())                                )]
+    #[case(locked(vec![(1, held_dep(2))],      vec![(3, held_wdr(4))]),      0, Err(ResolverError::NoTransactionFound))]
+    #[case(locked(vec![(1, held_dep(2))],      vec![(3, held_wdr(4))]),      1, Err(ResolverError::AccountLocked)     )]
+    #[case(locked(vec![(1, held_dep(2))],      vec![(3, held_wdr(4))]),      3, Err(ResolverError::AccountLocked)     )]
     #[case(locked(vec![(1, resolved_dep(2))],  vec![(3, resolved_wdr(4))]),  1, Ok(())                                )]
     #[case(locked(vec![(1, resolved_dep(2))],  vec![(3, resolved_wdr(4))]),  3, Ok(())                                )]
-    #[case(locked(vec![(1, chrgd_bck_dep(2))], vec![(3, chrgd_bck_wdr(4))]), 1, Ok(())                                )]
-    #[case(locked(vec![(1, chrgd_bck_dep(2))], vec![(3, chrgd_bck_wdr(4))]), 3, Ok(())                                )]
     fn locked_account_case(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
