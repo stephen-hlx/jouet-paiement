@@ -35,6 +35,8 @@ impl From<AccountTransactorError> for TransactionProcessorError {
             AccountTransactorError::NoTransactionFound => todo!(),
             AccountTransactorError::CannotResolveLockedAccount => todo!(),
             AccountTransactorError::CannotResolveNonDisputedTransaction(_) => todo!(),
+            AccountTransactorError::CannotChargebackLockedAccount => todo!(),
+            AccountTransactorError::CannotChargebackNonDisputedTransaction(_) => todo!(),
         }
     }
 }
