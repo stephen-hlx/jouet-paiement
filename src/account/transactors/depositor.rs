@@ -29,7 +29,7 @@ impl Depositor for SimpleDepositor {
         if account.status == AccountStatus::Locked {
             return Err(DepositorError::AccountLocked);
         }
-        account.account_snapshot.available += amount;
+        account.account_snapshot.available.0 += amount.0;
         account.deposits.insert(
             transaction_id,
             Deposit {
@@ -116,7 +116,7 @@ mod tests {
     use std::collections::HashMap;
 
     use assert_matches::assert_matches;
-    use ordered_float::OrderedFloat;
+
     use rstest::rstest;
 
     use crate::{
@@ -126,7 +126,7 @@ mod tests {
             AccountStatus::{self, Active, Locked},
             Deposit, DepositStatus,
         },
-        model::{Amount, TransactionId},
+        model::{Amount, Amount4DecimalBased, TransactionId},
     };
 
     use super::Depositor;
@@ -151,12 +151,12 @@ mod tests {
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
-        #[case] amount_u32: u32,
+        #[case] amount_i64: i64,
         #[case] expected: Account,
     ) {
         let depositor = SimpleDepositor;
         depositor
-            .deposit(&mut original, transaction_id, amount(amount_u32))
+            .deposit(&mut original, transaction_id, amount(amount_i64))
             .unwrap();
         assert_eq!(original, expected);
     }
@@ -171,14 +171,14 @@ mod tests {
         );
     }
 
-    fn active(available: i32, held: i32, deposits: Vec<(TransactionId, Deposit)>) -> Account {
+    fn active(available: i64, held: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {
         account(Active, available, held, deposits)
     }
 
     fn account(
         status: AccountStatus,
-        available: i32,
-        held: i32,
+        available: i64,
+        held: i64,
         deposits: Vec<(TransactionId, Deposit)>,
     ) -> Account {
         Account {
@@ -190,30 +190,30 @@ mod tests {
         }
     }
 
-    fn accepted_dep(amount_u32: u32) -> Deposit {
-        deposit(amount_u32, DepositStatus::Accepted)
+    fn accepted_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::Accepted)
     }
 
-    fn held_dep(amount_u32: u32) -> Deposit {
-        deposit(amount_u32, DepositStatus::Held)
+    fn held_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::Held)
     }
 
-    fn resolved_dep(amount_u32: u32) -> Deposit {
-        deposit(amount_u32, DepositStatus::Resolved)
+    fn resolved_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::Resolved)
     }
 
-    fn chrgd_bck_dep(amount_u32: u32) -> Deposit {
-        deposit(amount_u32, DepositStatus::ChargedBack)
+    fn chrgd_bck_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::ChargedBack)
     }
 
-    fn deposit(amount_u32: u32, status: DepositStatus) -> Deposit {
+    fn deposit(amount_i64: i64, status: DepositStatus) -> Deposit {
         Deposit {
-            amount: amount(amount_u32),
+            amount: amount(amount_i64),
             status,
         }
     }
 
-    fn amount(amount: u32) -> Amount {
-        OrderedFloat(amount as f32)
+    fn amount(amount: i64) -> Amount {
+        Amount4DecimalBased(amount)
     }
 }

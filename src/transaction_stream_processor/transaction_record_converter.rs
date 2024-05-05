@@ -1,6 +1,4 @@
-use ordered_float::OrderedFloat;
-
-use crate::model::{Transaction, TransactionKind};
+use crate::model::{Amount, Transaction, TransactionKind};
 
 use super::{TransactionRecord, TransactionRecordType, TransactionStreamProcessError};
 
@@ -23,7 +21,7 @@ pub(super) fn to_transaction(
             transaction_id,
             kind: TransactionKind::Deposit {
                 amount: match optional_amount {
-                    Some(amount) => OrderedFloat(amount),
+                    Some(amount) => Amount::from_str(&amount)?,
                     None => {
                         return Err(TransactionStreamProcessError::ParsingError(
                             "Amount not found for deposit.".to_string(),
@@ -37,7 +35,7 @@ pub(super) fn to_transaction(
             transaction_id,
             kind: TransactionKind::Withdrawal {
                 amount: match optional_amount {
-                    Some(amount) => OrderedFloat(amount),
+                    Some(amount) => Amount::from_str(&amount)?,
                     None => {
                         return Err(TransactionStreamProcessError::ParsingError(
                             "Amount not found for withdrawal.".to_string(),
@@ -67,18 +65,17 @@ pub(super) fn to_transaction(
 
 #[cfg(test)]
 mod tests {
-    use ordered_float::OrderedFloat;
     use rstest::rstest;
 
     use crate::transaction_stream_processor::transaction_record_converter::to_transaction;
 
-    use crate::model::{ClientId, Transaction, TransactionId, TransactionKind};
+    use crate::model::{Amount, ClientId, Transaction, TransactionId, TransactionKind};
 
     use super::{TransactionRecord, TransactionRecordType};
 
     const CLIENT_ID: ClientId = 1234;
     const TRANSACTION_ID: TransactionId = 5678;
-    const AMOUNT: f32 = 0.9;
+    const AMOUNT: &'static str = "0.9";
 
     #[rstest]
     #[case(deposit_record(Some(AMOUNT)), deposit_transaction(AMOUNT))]
@@ -93,15 +90,15 @@ mod tests {
         assert_eq!(to_transaction(transaction_record).unwrap(), expected);
     }
 
-    fn deposit_transaction(amount: f32) -> Transaction {
+    fn deposit_transaction(amount: &str) -> Transaction {
         transaction(TransactionKind::Deposit {
-            amount: OrderedFloat(amount),
+            amount: Amount::from_str(&amount).unwrap(),
         })
     }
 
-    fn withdrawal_transaction(amount: f32) -> Transaction {
+    fn withdrawal_transaction(amount: &str) -> Transaction {
         transaction(TransactionKind::Withdrawal {
-            amount: OrderedFloat(amount),
+            amount: Amount::from_str(&amount).unwrap(),
         })
     }
 
@@ -125,35 +122,35 @@ mod tests {
         }
     }
 
-    fn deposit_record(optional_amount: Option<f32>) -> TransactionRecord {
+    fn deposit_record(optional_amount: Option<&str>) -> TransactionRecord {
         transaction_record(TransactionRecordType::Deposit, optional_amount)
     }
 
-    fn withdrawal_record(optional_amount: Option<f32>) -> TransactionRecord {
+    fn withdrawal_record(optional_amount: Option<&str>) -> TransactionRecord {
         transaction_record(TransactionRecordType::Withdrawal, optional_amount)
     }
 
-    fn dispute_record(optional_amount: Option<f32>) -> TransactionRecord {
+    fn dispute_record(optional_amount: Option<&str>) -> TransactionRecord {
         transaction_record(TransactionRecordType::Dispute, optional_amount)
     }
 
-    fn resolve_record(optional_amount: Option<f32>) -> TransactionRecord {
+    fn resolve_record(optional_amount: Option<&str>) -> TransactionRecord {
         transaction_record(TransactionRecordType::Resolve, optional_amount)
     }
 
-    fn chargeback_record(optional_amount: Option<f32>) -> TransactionRecord {
+    fn chargeback_record(optional_amount: Option<&str>) -> TransactionRecord {
         transaction_record(TransactionRecordType::Chargeback, optional_amount)
     }
 
     fn transaction_record(
         txn_type: TransactionRecordType,
-        optional_amount: Option<f32>,
+        optional_amount: Option<&str>,
     ) -> TransactionRecord {
         TransactionRecord {
             txn_type,
             client_id: CLIENT_ID,
             transaction_id: TRANSACTION_ID,
-            optional_amount,
+            optional_amount: optional_amount.map(|s| s.to_string()),
         }
     }
 }

@@ -6,13 +6,12 @@ use jouet_paiement::{
         Account, AccountSnapshot, AccountStatus::Active, Deposit, DepositStatus::Accepted,
         SimpleAccountTransactor, Withdrawal,
     },
-    model::{ClientId, TransactionId},
+    model::{Amount4DecimalBased, ClientId, TransactionId},
     transaction_processor::SimpleTransactionProcessor,
     transaction_stream_processor::{
         csv_stream_processor::CsvStreamProcessor, TransactionStreamProcessor,
     },
 };
-use ordered_float::OrderedFloat;
 
 #[tokio::test]
 async fn e2e_small_input() {
@@ -29,20 +28,20 @@ async fn e2e_small_input() {
     deposit,      2, 30,    6.0";
 
     let mut client_1_deposits = HashMap::new();
-    client_1_deposits.insert(10, accepted_deposit(4.0));
-    client_1_deposits.insert(20, accepted_deposit(5.0));
+    client_1_deposits.insert(10, accepted_deposit("4.0"));
+    client_1_deposits.insert(20, accepted_deposit("5.0"));
 
     let mut client_2_deposits = HashMap::new();
-    client_2_deposits.insert(30, accepted_deposit(6.0));
+    client_2_deposits.insert(30, accepted_deposit("6.0"));
 
     let mut expected_accounts = HashMap::new();
     expected_accounts.insert(
         1,
-        active_account(1, snapshot(9, 0), client_1_deposits, HashMap::new()),
+        active_account(1, snapshot(90_000, 0), client_1_deposits, HashMap::new()),
     );
     expected_accounts.insert(
         2,
-        active_account(2, snapshot(6, 0), client_2_deposits, HashMap::new()),
+        active_account(2, snapshot(60_000, 0), client_2_deposits, HashMap::new()),
     );
 
     csv_stream_processor
@@ -57,7 +56,7 @@ async fn e2e_small_input() {
     });
 }
 
-fn snapshot(available: i32, held: i32) -> AccountSnapshot {
+fn snapshot(available: i64, held: i64) -> AccountSnapshot {
     AccountSnapshot::new(available, held)
 }
 
@@ -70,9 +69,9 @@ fn active_account(
     Account::new(client_id, Active, account_snapshot, deposits, withdrawals)
 }
 
-fn accepted_deposit(amount: f32) -> Deposit {
+fn accepted_deposit(amount: &str) -> Deposit {
     Deposit {
-        amount: OrderedFloat(amount),
+        amount: Amount4DecimalBased::from_str(amount).unwrap(),
         status: Accepted,
     }
 }

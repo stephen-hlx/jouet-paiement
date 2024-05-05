@@ -2,7 +2,7 @@ pub mod async_csv_stream_processor;
 pub mod csv_stream_processor;
 mod transaction_record_converter;
 
-use std::io::Read;
+use std::{io::Read, num::ParseFloatError};
 
 use async_trait::async_trait;
 
@@ -38,7 +38,7 @@ pub struct TransactionRecord {
     #[serde(rename = "tx")]
     pub transaction_id: TransactionId,
     #[serde(rename = "amount")]
-    pub optional_amount: Option<f32>,
+    pub optional_amount: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -65,12 +65,17 @@ impl From<TransactionProcessorError> for TransactionStreamProcessError {
     }
 }
 
+impl From<ParseFloatError> for TransactionStreamProcessError {
+    fn from(err: ParseFloatError) -> Self {
+        Self::ParsingError(err.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
 
     use dashmap::DashMap;
-    use ordered_float::OrderedFloat;
     use rstest::rstest;
     use rstest_reuse::{apply, template};
 
@@ -78,7 +83,9 @@ mod tests {
     use crate::transaction_stream_processor::csv_stream_processor::CsvStreamProcessor;
     use crate::transaction_stream_processor::TransactionStreamProcessor;
 
-    use crate::model::{ClientId, Transaction, TransactionId, TransactionKind};
+    use crate::model::{
+        Amount4DecimalBased, ClientId, Transaction, TransactionId, TransactionKind,
+    };
     use crate::transaction_processor::RecordSink;
 
     #[template]
@@ -86,11 +93,11 @@ mod tests {
     #[case("
     type,    client, tx, amount
     deposit,      1,  2,    3.0",
-            vec![deposit(1, 2, 3.0)])]
+            vec![deposit(1, 2, 30_000)])]
     #[case("
     type,       client, tx, amount
     withdrawal,      4,  5,    6.0",
-            vec![withdrawal(4, 5, 6.0)])]
+            vec![withdrawal(4, 5, 60_000)])]
     #[case("
     type,    client, tx, amount
     dispute,      7,  8,       ",
@@ -110,8 +117,8 @@ mod tests {
     dispute, 7, 8,
     resolve, 9, 10,
     chargeback, 11, 12,",
-            vec![deposit(1, 2, 3.0),
-            withdrawal(4, 5, 6.0),
+            vec![deposit(1, 2, 30_000),
+            withdrawal(4, 5, 60_000),
             dispute(7, 8),
             resolve(9, 10),
             chargeback(11, 12)])]
@@ -149,22 +156,22 @@ mod tests {
         assert_eq!(*records.lock().unwrap(), expected);
     }
 
-    fn deposit(client_id: ClientId, transaction_id: TransactionId, amount: f32) -> Transaction {
+    fn deposit(client_id: ClientId, transaction_id: TransactionId, amount: i64) -> Transaction {
         Transaction {
             client_id,
             transaction_id,
             kind: TransactionKind::Deposit {
-                amount: OrderedFloat(amount),
+                amount: Amount4DecimalBased(amount),
             },
         }
     }
 
-    fn withdrawal(client_id: ClientId, transaction_id: TransactionId, amount: f32) -> Transaction {
+    fn withdrawal(client_id: ClientId, transaction_id: TransactionId, amount: i64) -> Transaction {
         Transaction {
             client_id,
             transaction_id,
             kind: TransactionKind::Withdrawal {
-                amount: OrderedFloat(amount),
+                amount: Amount4DecimalBased(amount),
             },
         }
     }

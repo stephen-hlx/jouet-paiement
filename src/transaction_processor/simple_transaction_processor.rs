@@ -47,14 +47,14 @@ mod tests {
 
     use dashmap::DashMap;
 
-    use ordered_float::OrderedFloat;
-
     use crate::{
         account::{
             account_transactor::{AccountTransactor, AccountTransactorError},
             Account,
         },
-        model::{Amount, ClientId, Transaction, TransactionId, TransactionKind},
+        model::{
+            Amount, Amount4DecimalBased, ClientId, Transaction, TransactionId, TransactionKind,
+        },
         transaction_processor::TransactionProcessor,
     };
 
@@ -62,7 +62,7 @@ mod tests {
 
     const CLIENT_ID: ClientId = 123;
     const TRANSACTION_ID: TransactionId = 456;
-    const AMOUNT: Amount = OrderedFloat(7.89);
+    const AMOUNT: Amount = Amount4DecimalBased(7890);
 
     pub struct MockAccountTransactionProcessor {
         expected_request: (Account, Transaction),

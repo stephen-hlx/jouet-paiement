@@ -30,10 +30,10 @@ impl Withdrawer for SimpleWithdrawer {
         if account.status == AccountStatus::Locked {
             return Err(WithdrawerError::AccountLocked);
         }
-        if amount != 0.0 && account.account_snapshot.available < amount {
+        if amount.0 != 0 && account.account_snapshot.available.0 < amount.0 {
             return Err(WithdrawerError::InsufficientFund);
         }
-        account.account_snapshot.available -= amount;
+        account.account_snapshot.available.0 -= amount.0;
         account.withdrawals.insert(
             transaction_id,
             Withdrawal {
@@ -120,7 +120,6 @@ mod tests {
     use std::collections::HashMap;
 
     use assert_matches::assert_matches;
-    use ordered_float::OrderedFloat;
     use rstest::rstest;
 
     use crate::{
@@ -130,7 +129,7 @@ mod tests {
             AccountStatus::{self, Active, Locked},
             Withdrawal, WithdrawalStatus,
         },
-        model::{Amount, TransactionId},
+        model::{Amount, Amount4DecimalBased, TransactionId},
     };
 
     use super::SimpleWithdrawer;
@@ -159,12 +158,12 @@ mod tests {
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
-        #[case] amount_i32: i32,
+        #[case] amount_i64: i64,
         #[case] expected: Account,
     ) {
         let withdrawer = SimpleWithdrawer;
         withdrawer
-            .withdraw(&mut original, transaction_id, amount(amount_i32))
+            .withdraw(&mut original, transaction_id, amount(amount_i64))
             .unwrap();
         assert_eq!(original, expected);
     }
@@ -175,7 +174,7 @@ mod tests {
     #[case(5, 7)]
     #[case(0, 7)]
     #[case(                -1,                 7)]
-    fn insufficient_fund_cases(#[case] original_available: i32, #[case] withdraw_amount: i32) {
+    fn insufficient_fund_cases(#[case] original_available: i64, #[case] withdraw_amount: i64) {
         let mut account = active(original_available, 0, vec![]);
         let withdrawer = SimpleWithdrawer;
         assert_matches!(
@@ -194,14 +193,14 @@ mod tests {
         );
     }
 
-    fn active(available: i32, held: i32, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
+    fn active(available: i64, held: i64, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
         account(Active, available, held, withdrawals)
     }
 
     fn account(
         status: AccountStatus,
-        available: i32,
-        held: i32,
+        available: i64,
+        held: i64,
         withdrawals: Vec<(TransactionId, Withdrawal)>,
     ) -> Account {
         Account {
@@ -213,30 +212,30 @@ mod tests {
         }
     }
 
-    fn accepted_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::Accepted)
+    fn accepted_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::Accepted)
     }
 
-    fn held_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::Held)
+    fn held_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::Held)
     }
 
-    fn resolved_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::Resolved)
+    fn resolved_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::Resolved)
     }
 
-    fn chrgd_bck_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::ChargedBack)
+    fn chrgd_bck_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::ChargedBack)
     }
 
-    fn withdrawal(amount_u32: i32, status: WithdrawalStatus) -> Withdrawal {
+    fn withdrawal(amount_i64: i64, status: WithdrawalStatus) -> Withdrawal {
         Withdrawal {
-            amount: amount(amount_u32),
+            amount: amount(amount_i64),
             status,
         }
     }
 
-    fn amount(amount: i32) -> Amount {
-        OrderedFloat(amount as f32)
+    fn amount(amount: i64) -> Amount {
+        Amount4DecimalBased(amount)
     }
 }

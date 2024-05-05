@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::model::{Amount, ClientId, TransactionId};
+use crate::model::{Amount, Amount4DecimalBased, ClientId, TransactionId};
 
 /// The snapshot of an account.
 /// An account consists of a series of chronologically ordered transactions
@@ -144,11 +144,10 @@ pub(crate) trait AccountStore {
 pub(crate) enum AccountStoreError {}
 
 impl AccountSnapshot {
-    pub fn new(available: i32, held: i32) -> Self {
-        use ordered_float::OrderedFloat;
+    pub fn new(available: i64, held: i64) -> Self {
         AccountSnapshot {
-            available: OrderedFloat(available as f32),
-            held: OrderedFloat(held as f32),
+            available: Amount4DecimalBased(available),
+            held: Amount4DecimalBased(held),
         }
     }
     pub(crate) fn empty() -> Self {

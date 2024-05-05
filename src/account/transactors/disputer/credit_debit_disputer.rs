@@ -19,8 +19,8 @@ impl Disputer for CreditDebitDisputer {
                     if account.status == AccountStatus::Locked {
                         return Err(DisputerError::AccountLocked);
                     }
-                    account.account_snapshot.available -= deposit.amount;
-                    account.account_snapshot.held += deposit.amount;
+                    account.account_snapshot.available.0 -= deposit.amount.0;
+                    account.account_snapshot.held.0 += deposit.amount.0;
                     deposit.status = DepositStatus::Held;
                     return Ok(());
                 }
@@ -33,8 +33,8 @@ impl Disputer for CreditDebitDisputer {
                         return Err(DisputerError::AccountLocked);
                     }
                     withdrawal.status = WithdrawalStatus::Held;
-                    account.account_snapshot.available += withdrawal.amount;
-                    account.account_snapshot.held -= withdrawal.amount;
+                    account.account_snapshot.available.0 += withdrawal.amount.0;
+                    account.account_snapshot.held.0 -= withdrawal.amount.0;
                     return Ok(());
                 }
                 _ => return Ok(()),
@@ -48,7 +48,6 @@ impl Disputer for CreditDebitDisputer {
 mod tests {
 
     use assert_matches::assert_matches;
-    use ordered_float::OrderedFloat;
     use rstest::rstest;
 
     use crate::{
@@ -58,7 +57,7 @@ mod tests {
             AccountStatus::{self, Active, Locked},
             Deposit, DepositStatus, Withdrawal, WithdrawalStatus,
         },
-        model::{Amount, TransactionId},
+        model::{Amount, Amount4DecimalBased, TransactionId},
     };
 
     use super::CreditDebitDisputer;
@@ -139,8 +138,8 @@ mod tests {
         account(Locked, 0, 0, deposits, withdrawals)
     }
     fn active(
-        available: i32,
-        held: i32,
+        available: i64,
+        held: i64,
         deposits: Vec<(TransactionId, Deposit)>,
         withdrawals: Vec<(TransactionId, Withdrawal)>,
     ) -> Account {
@@ -149,8 +148,8 @@ mod tests {
 
     fn account(
         status: AccountStatus,
-        available: i32,
-        held: i32,
+        available: i64,
+        held: i64,
         deposits: Vec<(TransactionId, Deposit)>,
         withdrawals: Vec<(TransactionId, Withdrawal)>,
     ) -> Account {
@@ -163,53 +162,53 @@ mod tests {
         }
     }
 
-    fn accepted_dep(amount_i32: i32) -> Deposit {
-        deposit(amount_i32, DepositStatus::Accepted)
+    fn accepted_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::Accepted)
     }
 
-    fn held_dep(amount_i32: i32) -> Deposit {
-        deposit(amount_i32, DepositStatus::Held)
+    fn held_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::Held)
     }
 
-    fn resolved_dep(amount_i32: i32) -> Deposit {
-        deposit(amount_i32, DepositStatus::Resolved)
+    fn resolved_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::Resolved)
     }
 
-    fn chrgd_bck_dep(amount_i32: i32) -> Deposit {
-        deposit(amount_i32, DepositStatus::ChargedBack)
+    fn chrgd_bck_dep(amount_i64: i64) -> Deposit {
+        deposit(amount_i64, DepositStatus::ChargedBack)
     }
 
-    fn deposit(amount_i32: i32, status: DepositStatus) -> Deposit {
+    fn deposit(amount_i64: i64, status: DepositStatus) -> Deposit {
         Deposit {
-            amount: amount(amount_i32),
+            amount: amount(amount_i64),
             status,
         }
     }
 
-    fn accepted_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::Accepted)
+    fn accepted_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::Accepted)
     }
 
-    fn held_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::Held)
+    fn held_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::Held)
     }
 
-    fn resolved_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::Resolved)
+    fn resolved_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::Resolved)
     }
 
-    fn chrgd_bck_wdr(amount_i32: i32) -> Withdrawal {
-        withdrawal(amount_i32, WithdrawalStatus::ChargedBack)
+    fn chrgd_bck_wdr(amount_i64: i64) -> Withdrawal {
+        withdrawal(amount_i64, WithdrawalStatus::ChargedBack)
     }
 
-    fn withdrawal(amount_u32: i32, status: WithdrawalStatus) -> Withdrawal {
+    fn withdrawal(amount_u32: i64, status: WithdrawalStatus) -> Withdrawal {
         Withdrawal {
             amount: amount(amount_u32),
             status,
         }
     }
 
-    fn amount(amount: i32) -> Amount {
-        OrderedFloat(amount as f32)
+    fn amount(amount: i64) -> Amount {
+        Amount4DecimalBased(amount)
     }
 }

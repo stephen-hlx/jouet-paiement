@@ -155,7 +155,6 @@ impl From<BackchargerError> for AccountTransactorError {
 mod tests {
     use std::collections::HashMap;
 
-    use ordered_float::OrderedFloat;
     use rstest::rstest;
 
     use crate::{
@@ -169,7 +168,9 @@ mod tests {
             },
             Account, AccountSnapshot, AccountStatus,
         },
-        model::{Amount, ClientId, Transaction, TransactionId, TransactionKind},
+        model::{
+            Amount, Amount4DecimalBased, ClientId, Transaction, TransactionId, TransactionKind,
+        },
     };
 
     use super::{AccountTransactor, AccountTransactorError, SimpleAccountTransactor};
@@ -197,7 +198,7 @@ mod tests {
     fn calls_depositor_for_deposit() {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;
-        let amount: Amount = OrderedFloat(0.0);
+        let amount: Amount = Amount4DecimalBased(0);
 
         let depositor = MockDepositor::new();
         let withdrawer = MockWithdrawer::new();
@@ -227,7 +228,7 @@ mod tests {
     ) {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;
-        let amount: Amount = OrderedFloat(0.0);
+        let amount: Amount = Amount4DecimalBased(0);
 
         let depositor = MockDepositor::new();
         let withdrawer = MockWithdrawer::new();
@@ -254,7 +255,7 @@ mod tests {
     fn calls_withdrawer_for_withdrawal() {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;
-        let amount: Amount = OrderedFloat(0.0);
+        let amount: Amount = Amount4DecimalBased(0);
 
         let depositor = MockDepositor::new();
         let withdrawer = MockWithdrawer::new();
@@ -288,7 +289,7 @@ mod tests {
     ) {
         let mut account = some_account();
         let transaction_id: TransactionId = 0;
-        let amount: Amount = OrderedFloat(0.0);
+        let amount: Amount = Amount4DecimalBased(0);
 
         let depositor = MockDepositor::new();
         let withdrawer = MockWithdrawer::new();
@@ -506,22 +507,22 @@ mod tests {
         }
     }
 
-    fn deposit(transaction_id: TransactionId, amount: u32) -> Transaction {
+    fn deposit(transaction_id: TransactionId, amount: i64) -> Transaction {
         Transaction {
             client_id: CLIENT_ID,
             transaction_id,
             kind: TransactionKind::Deposit {
-                amount: OrderedFloat(amount as f32),
+                amount: Amount4DecimalBased(amount),
             },
         }
     }
 
-    fn withdrawal(transaction_id: TransactionId, amount: u32) -> Transaction {
+    fn withdrawal(transaction_id: TransactionId, amount: i64) -> Transaction {
         Transaction {
             client_id: CLIENT_ID,
             transaction_id,
             kind: TransactionKind::Withdrawal {
-                amount: OrderedFloat(amount as f32),
+                amount: Amount4DecimalBased(amount),
             },
         }
     }
