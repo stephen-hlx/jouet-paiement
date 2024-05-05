@@ -9,8 +9,8 @@ use tokio::{
 };
 
 use crate::{
-    model::ClientId,
-    transaction_processor::{Transaction, TransactionProcessor, TransactionProcessorError},
+    model::{ClientId, Transaction},
+    transaction_processor::{TransactionProcessor, TransactionProcessorError},
 };
 
 use super::{

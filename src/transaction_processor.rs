@@ -4,28 +4,7 @@ use async_trait::async_trait;
 pub use mock::{Blackhole, RecordSink};
 pub use simple_transaction_processor::SimpleTransactionProcessor;
 
-use crate::{
-    account::account_transactor::AccountTransactionProcessorError,
-    model::{Amount, ClientId, TransactionId},
-};
-
-/// The transaction structure accepted by this application.
-#[derive(Debug, PartialEq, Clone)]
-pub struct Transaction {
-    pub client_id: ClientId,
-    pub transaction_id: TransactionId,
-    pub kind: TransactionKind,
-}
-
-/// The kinds of transactions.
-#[derive(Debug, PartialEq, Clone)]
-pub enum TransactionKind {
-    Deposit { amount: Amount },
-    Withdrawal { amount: Amount },
-    Dispute,
-    Resolve,
-    ChargeBack,
-}
+use crate::{account::account_transactor::AccountTransactionProcessorError, model::Transaction};
 
 /// The transction processor.
 /// It takes in a transaction and processes it based on previously seen
@@ -64,7 +43,9 @@ pub(crate) mod mock {
 
     use async_trait::async_trait;
 
-    use super::{Transaction, TransactionProcessor, TransactionProcessorError};
+    use crate::model::Transaction;
+
+    use super::{TransactionProcessor, TransactionProcessorError};
 
     pub struct RecordSink {
         pub records: Arc<Mutex<Vec<Transaction>>>,

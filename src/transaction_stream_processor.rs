@@ -78,11 +78,8 @@ mod tests {
     use crate::transaction_stream_processor::csv_stream_processor::CsvStreamProcessor;
     use crate::transaction_stream_processor::TransactionStreamProcessor;
 
+    use crate::model::{ClientId, Transaction, TransactionId, TransactionKind};
     use crate::transaction_processor::RecordSink;
-    use crate::{
-        model::{ClientId, TransactionId},
-        transaction_processor::{Transaction, TransactionKind},
-    };
 
     #[template]
     #[rstest]

@@ -3,8 +3,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use dashmap::DashMap;
 
-use super::{Transaction, TransactionProcessor, TransactionProcessorError};
+use super::{TransactionProcessor, TransactionProcessorError};
 use crate::account::account_transactor::AccountTransactor;
+use crate::model::Transaction;
 use crate::{account::Account, model::ClientId};
 
 pub struct SimpleTransactionProcessor {
@@ -53,8 +54,8 @@ mod tests {
             account_transactor::{AccountTransactionProcessorError, AccountTransactor},
             Account,
         },
-        model::{Amount, ClientId, TransactionId},
-        transaction_processor::{Transaction, TransactionProcessor},
+        model::{Amount, ClientId, Transaction, TransactionId, TransactionKind},
+        transaction_processor::TransactionProcessor,
     };
 
     use super::SimpleTransactionProcessor;
@@ -86,7 +87,7 @@ mod tests {
         let transaction = Transaction {
             client_id: CLIENT_ID,
             transaction_id: TRANSACTION_ID,
-            kind: crate::transaction_processor::TransactionKind::Deposit { amount: AMOUNT },
+            kind: TransactionKind::Deposit { amount: AMOUNT },
         };
         let account = Account::active(CLIENT_ID);
         let accounts = Arc::new(DashMap::new());
@@ -105,7 +106,7 @@ mod tests {
         let transaction = Transaction {
             client_id: CLIENT_ID,
             transaction_id: TRANSACTION_ID,
-            kind: crate::transaction_processor::TransactionKind::Deposit { amount: AMOUNT },
+            kind: TransactionKind::Deposit { amount: AMOUNT },
         };
         let account = Account::active(CLIENT_ID);
         let accounts = Arc::new(DashMap::new());

@@ -1,6 +1,6 @@
 use ordered_float::OrderedFloat;
 
-use crate::transaction_processor::{Transaction, TransactionKind};
+use crate::model::{Transaction, TransactionKind};
 
 use super::{TransactionRecord, TransactionRecordType, TransactionStreamProcessError};
 
@@ -72,10 +72,7 @@ mod tests {
 
     use crate::transaction_stream_processor::transaction_record_converter::to_transaction;
 
-    use crate::{
-        model::{ClientId, TransactionId},
-        transaction_processor::{Transaction, TransactionKind},
-    };
+    use crate::model::{ClientId, Transaction, TransactionId, TransactionKind};
 
     use super::{TransactionRecord, TransactionRecordType};
 

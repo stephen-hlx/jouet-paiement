@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{
     account::Account,
-    transaction_processor::{Transaction, TransactionKind},
+    model::{Transaction, TransactionKind},
 };
 
 use super::transactors::{
@@ -125,8 +125,7 @@ mod tests {
             },
             Account, AccountSnapshot, AccountStatus,
         },
-        model::{Amount, ClientId, TransactionId},
-        transaction_processor::{Transaction, TransactionKind},
+        model::{Amount, ClientId, Transaction, TransactionId, TransactionKind},
     };
 
     use super::{AccountTransactionProcessorError, AccountTransactor, SimpleAccountTransactor};
