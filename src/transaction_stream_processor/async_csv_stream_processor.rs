@@ -13,7 +13,10 @@ use crate::{
     transaction_processor::{Transaction, TransactionProcessor, TransactionProcessorError},
 };
 
-use super::{to_transaction, TransactionStreamProcessError, TransactionStreamProcessor};
+use super::{
+    transaction_record_converter::to_transaction, TransactionStreamProcessError,
+    TransactionStreamProcessor,
+};
 
 pub struct AsyncCsvStreamProcessor {
     transaction_processor: Arc<dyn TransactionProcessor + Send + Sync>,

@@ -5,7 +5,10 @@ use csv::Trim;
 
 use crate::transaction_processor::TransactionProcessor;
 
-use super::{to_transaction, TransactionStreamProcessError, TransactionStreamProcessor};
+use super::{
+    transaction_record_converter::to_transaction, TransactionStreamProcessError,
+    TransactionStreamProcessor,
+};
 
 pub struct CsvStreamProcessor {
     consumer: Box<dyn TransactionProcessor + Send + Sync>,
