@@ -11,7 +11,7 @@ impl Amount4DecimalBased {
         Ok(Self(v as i64))
     }
 
-    fn to_str(&self) -> String {
+    pub(crate) fn to_str(&self) -> String {
         let mut f = self.0 as f64;
         f /= 10_000 as f64;
         format!("{:.4}", f)

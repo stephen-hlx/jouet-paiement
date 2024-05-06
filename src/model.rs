@@ -1,3 +1,6 @@
+use serde::Serialize;
+
+mod account_summary;
 mod amount;
 
 pub type ClientId = u16;
@@ -20,6 +23,21 @@ pub enum TransactionKind {
     Dispute,
     Resolve,
     ChargeBack,
+}
+
+/// TODO: Use proper serde to avoid having `String`s as the type of fields.
+#[derive(Debug, Serialize)]
+pub struct AccountSummary {
+    #[serde(rename = "client")]
+    client_id: ClientId,
+    #[serde(rename = "available")]
+    available: String,
+    #[serde(rename = "held")]
+    held: String,
+    #[serde(rename = "total")]
+    total: String,
+    #[serde(rename = "locked")]
+    locked: bool,
 }
 
 /// The amount is stored as an i64 to simplify the handling of precision.

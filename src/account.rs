@@ -16,8 +16,8 @@ use crate::model::{Amount, Amount4DecimalBased, ClientId, TransactionId};
 /// of an account.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct AccountSnapshot {
-    available: Amount,
-    held: Amount,
+    pub(crate) available: Amount,
+    pub(crate) held: Amount,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -35,7 +35,7 @@ pub enum AccountStatus {
 pub struct Account {
     pub(crate) client_id: ClientId,
     pub(crate) status: AccountStatus,
-    account_snapshot: AccountSnapshot,
+    pub(crate) account_snapshot: AccountSnapshot,
     deposits: HashMap<TransactionId, Deposit>,
     withdrawals: HashMap<TransactionId, Withdrawal>,
 }
