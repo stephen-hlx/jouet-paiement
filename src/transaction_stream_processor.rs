@@ -7,6 +7,7 @@ use std::{io::Read, num::ParseFloatError};
 use async_trait::async_trait;
 
 use serde::Deserialize;
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -29,7 +30,7 @@ pub enum TransactionStreamProcessError {
     FailedToShutdown(String),
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct TransactionRecord {
     #[serde(rename = "type")]
     pub txn_type: TransactionRecordType,
@@ -41,7 +42,7 @@ pub struct TransactionRecord {
     pub optional_amount: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub enum TransactionRecordType {
     #[serde(rename = "deposit")]
     Deposit,
