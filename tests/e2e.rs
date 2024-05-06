@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use jouet_paiement::{
-    account::{Account, SimpleAccountTransactor},
-    model::{AccountSummaryWriter, ClientId},
+    account::SimpleAccountTransactor,
+    model::{AccountSummary, AccountSummaryCsvWriter},
     transaction_processor::SimpleTransactionProcessor,
     transaction_stream_processor::{
         async_csv_stream_processor::AsyncCsvStreamProcessor, TransactionStreamProcessor,
@@ -30,19 +30,15 @@ async fn e2e_small_input_using_async_processor() {
     processor.process(input.as_bytes()).await.unwrap();
     processor.shutdown().await.unwrap();
 
-    let mut values: Vec<(ClientId, Account)> = accounts
-        .iter()
-        .map(|entry| (entry.key().clone(), entry.value().clone()))
-        .collect();
-    values.sort_by(|a, b| {
-        a.0.partial_cmp(&b.0)
+    let mut summaries: Vec<AccountSummary> =
+        accounts.iter().map(|entry| entry.value().into()).collect();
+    summaries.sort_by(|a, b| {
+        a.client_id
+            .partial_cmp(&b.client_id)
             .expect("ClientId is not a float so there is no way this could return a `None`.")
     });
     assert_eq!(
-        String::from_utf8(
-            AccountSummaryWriter::write(values.iter().map(|e| e.1.clone()).collect()).unwrap()
-        )
-        .unwrap(),
+        String::from_utf8(AccountSummaryCsvWriter::write(summaries).unwrap()).unwrap(),
         "\
         client,available,held,total,locked\n\
         1,9.0000,0.0000,9.0000,false\n\

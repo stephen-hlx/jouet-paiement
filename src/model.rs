@@ -2,7 +2,7 @@ use serde::Serialize;
 
 mod account_summary;
 mod amount;
-pub use account_summary::AccountSummaryWriter;
+pub use account_summary::AccountSummaryCsvWriter;
 
 pub type ClientId = u16;
 pub type TransactionId = u32;
@@ -30,7 +30,7 @@ pub enum TransactionKind {
 #[derive(Debug, Serialize)]
 pub struct AccountSummary {
     #[serde(rename = "client")]
-    client_id: ClientId,
+    pub client_id: ClientId,
     #[serde(rename = "available")]
     available: String,
     #[serde(rename = "held")]
