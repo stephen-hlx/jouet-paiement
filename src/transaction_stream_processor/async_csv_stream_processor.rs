@@ -71,7 +71,7 @@ impl AsyncCsvStreamProcessor {
         let clone = self.transaction_processor.clone();
         let handle = tokio::spawn(async move {
             while let Some(transaction) = receiver.recv().await {
-                return clone.process(transaction).await;
+                clone.process(transaction).await?;
             }
             Ok(())
         });

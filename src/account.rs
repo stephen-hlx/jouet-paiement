@@ -30,8 +30,7 @@ pub enum AccountStatus {
 }
 
 /// An account structure used to process transactions.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Account {
     pub(crate) client_id: ClientId,
     pub(crate) status: AccountStatus,
@@ -51,6 +50,7 @@ impl Account {
         }
     }
 
+    #[cfg(test)]
     pub fn new(
         client_id: ClientId,
         status: AccountStatus,

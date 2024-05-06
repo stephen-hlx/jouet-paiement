@@ -2,6 +2,7 @@ use serde::Serialize;
 
 mod account_summary;
 mod amount;
+pub use account_summary::AccountSummaryWriter;
 
 pub type ClientId = u16;
 pub type TransactionId = u32;

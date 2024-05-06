@@ -5,6 +5,12 @@ use crate::account::{Account, AccountSnapshot, AccountStatus};
 
 use super::{AccountSummary, Amount4DecimalBased};
 
+impl From<Account> for AccountSummary {
+    fn from(account: Account) -> Self {
+        AccountSummary::from(&account)
+    }
+}
+
 impl From<&Account> for AccountSummary {
     fn from(account: &Account) -> Self {
         let AccountSnapshot { available, held } = account.account_snapshot;
@@ -19,18 +25,21 @@ impl From<&Account> for AccountSummary {
     }
 }
 
-struct AccountSummaryWriter;
+pub struct AccountSummaryWriter;
 
 #[derive(Debug, Error)]
-enum AccountSummaryWriterError {
+pub enum AccountSummaryWriterError {
     #[error("Failed to serialise the AccountSummary: {0}")]
     SerialisationError(String),
 }
 
 impl AccountSummaryWriter {
-    pub fn write(accounts: &Vec<Account>) -> Result<Vec<u8>, AccountSummaryWriterError> {
+    pub fn write(accounts: Vec<Account>) -> Result<Vec<u8>, AccountSummaryWriterError> {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        for summary in accounts.iter().map(|account| AccountSummary::from(account)) {
+        for summary in accounts
+            .into_iter()
+            .map(|account| AccountSummary::from(account))
+        {
             wtr.serialize(summary).unwrap();
         }
         match wtr.into_inner() {
@@ -69,7 +78,7 @@ mod tests {
         );
 
         assert_eq!(
-            String::from_utf8(AccountSummaryWriter::write(&vec![account_1, account_2]).unwrap())
+            String::from_utf8(AccountSummaryWriter::write(vec![account_1, account_2]).unwrap())
                 .unwrap(),
             "\
             client,available,held,total,locked\n\

@@ -1,25 +1,25 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use dashmap::DashMap;
 use jouet_paiement::{
-    account::{
-        Account, AccountSnapshot, AccountStatus::Active, Deposit, DepositStatus::Accepted,
-        SimpleAccountTransactor, Withdrawal,
-    },
-    model::{Amount4DecimalBased, ClientId, TransactionId},
+    account::{Account, SimpleAccountTransactor},
+    model::{AccountSummaryWriter, ClientId},
     transaction_processor::SimpleTransactionProcessor,
     transaction_stream_processor::{
-        csv_stream_processor::CsvStreamProcessor, TransactionStreamProcessor,
+        async_csv_stream_processor::AsyncCsvStreamProcessor, TransactionStreamProcessor,
     },
 };
 
 #[tokio::test]
-async fn e2e_small_input() {
+async fn e2e_small_input_using_async_processor() {
     let accounts = Arc::new(DashMap::new());
     let account_transaction_processor = SimpleAccountTransactor::new();
-    let transaction_consumer =
+    let transaction_processor =
         SimpleTransactionProcessor::new(accounts.clone(), Box::new(account_transaction_processor));
-    let csv_stream_processor = CsvStreamProcessor::new(Box::new(transaction_consumer));
+    let senders_and_handles = DashMap::new();
+
+    let processor =
+        AsyncCsvStreamProcessor::new(Arc::new(transaction_processor), senders_and_handles);
 
     let input = "
        type, client, tx, amount
@@ -27,51 +27,25 @@ async fn e2e_small_input() {
     deposit,      1, 20,    5.0
     deposit,      2, 30,    6.0";
 
-    let mut client_1_deposits = HashMap::new();
-    client_1_deposits.insert(10, accepted_deposit("4.0"));
-    client_1_deposits.insert(20, accepted_deposit("5.0"));
+    processor.process(input.as_bytes()).await.unwrap();
+    processor.shutdown().await.unwrap();
 
-    let mut client_2_deposits = HashMap::new();
-    client_2_deposits.insert(30, accepted_deposit("6.0"));
-
-    let mut expected_accounts = HashMap::new();
-    expected_accounts.insert(
-        1,
-        active_account(1, snapshot(90_000, 0), client_1_deposits, HashMap::new()),
-    );
-    expected_accounts.insert(
-        2,
-        active_account(2, snapshot(60_000, 0), client_2_deposits, HashMap::new()),
-    );
-
-    csv_stream_processor
-        .process(input.as_bytes())
-        .await
-        .unwrap();
-    assert_eq!(accounts.len(), expected_accounts.len());
-    accounts.iter().for_each(|entry| {
-        let key = entry.key();
-        let value = entry.value();
-        assert_eq!(value, expected_accounts.get(key).unwrap());
+    let mut values: Vec<(ClientId, Account)> = accounts
+        .iter()
+        .map(|entry| (entry.key().clone(), entry.value().clone()))
+        .collect();
+    values.sort_by(|a, b| {
+        a.0.partial_cmp(&b.0)
+            .expect("ClientId is not a float so there is no way this could return a `None`.")
     });
-}
-
-fn snapshot(available: i64, held: i64) -> AccountSnapshot {
-    AccountSnapshot::new(available, held)
-}
-
-fn active_account(
-    client_id: ClientId,
-    account_snapshot: AccountSnapshot,
-    deposits: HashMap<TransactionId, Deposit>,
-    withdrawals: HashMap<TransactionId, Withdrawal>,
-) -> Account {
-    Account::new(client_id, Active, account_snapshot, deposits, withdrawals)
-}
-
-fn accepted_deposit(amount: &str) -> Deposit {
-    Deposit {
-        amount: Amount4DecimalBased::from_str(amount).unwrap(),
-        status: Accepted,
-    }
+    assert_eq!(
+        String::from_utf8(
+            AccountSummaryWriter::write(values.iter().map(|e| e.1.clone()).collect()).unwrap()
+        )
+        .unwrap(),
+        "\
+        client,available,held,total,locked\n\
+        1,9.0000,0.0000,9.0000,false\n\
+        2,6.0000,0.0000,6.0000,false\n"
+    );
 }
