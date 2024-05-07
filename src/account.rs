@@ -99,45 +99,12 @@ pub struct Deposit {
 pub enum WithdrawalStatus {
     /// This is the initial state of an accepted withdrawal.
     Accepted,
-
-    /// The account did not have sufficient fund for the withdrawal.
-    /// This transaction does not have an effect on the funds of the account.
-    Rejected,
-
-    /// An accepted withdrawal can be disputed.
-    /// Once a dispute transaction with the same [`TransactionId`] is received,
-    /// the withdrawal is put on hold.
-    /// An on-hold withdrawal will be either resolved or charged back,
-    /// depending on the subsequent transaction that concludes it.
-    Held,
-
-    /// A disputed withdrawal can be resolved.
-    /// Once resolved, the funds associated with the withdrawal will be
-    /// effective on the available amount.
-    Resolved,
-
-    /// A disputed withdrawal can be charged back.
-    /// Once charged back, the withdrawal will be reversed.
-    ChargedBack,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Withdrawal {
     amount: Amount,
     status: WithdrawalStatus,
-}
-
-/// A trait that specify a storage of an account.
-/// TODO: a simple map would just work fine
-pub(crate) trait AccountStore {
-    /// Get the account from the [`AccountStore`]
-    fn get(&self, client_id: ClientId) -> Result<Option<Account>, AccountStoreError>;
-
-    /// Create an account in the [`AccountStore`]
-    fn create(&self, client_id: ClientId) -> Result<Account, AccountStoreError>;
-
-    /// List all accounts
-    fn list(&self) -> Result<Vec<Account>, AccountStoreError>;
 }
 
 #[derive(Debug, Error)]
