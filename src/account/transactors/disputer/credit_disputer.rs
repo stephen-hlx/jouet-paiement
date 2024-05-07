@@ -26,7 +26,7 @@ impl Disputer for CreditDisputer {
                 }
                 _ => return Ok(SuccessStatus::Duplicate),
             },
-            None => Err(DisputerError::NoTransactionFound(transaction_id)),
+            None => Err(DisputerError::NoTransactionFound),
         }
     }
 }
@@ -56,15 +56,15 @@ mod tests {
     #[rstest]
     #[rustfmt::skip(case)]
     // disputing credit transactions
-    //    |------------------ input ---------------------| |--------------------------- output ----------------------------------|
-    //     original_account,                            tx                              expected_account
-    //        avail, held, deposits,                    id, expected_status,                avail, held, deposits
-    #[case(active(7,    0, vec![(0, accepted_dep(3))] ), 0, Ok(Transacted),             active( 4,    3, vec![(0, held_dep(3))]     ))]
-    #[case(active(7,    0, vec![(0, held_dep(3))]     ), 0, Ok(Duplicate),              active( 7,    0, vec![(0, held_dep(3))]     ))]
-    #[case(active(7,    0, vec![(0, resolved_dep(3))] ), 0, Ok(Duplicate),              active( 7,    0, vec![(0, resolved_dep(3))] ))]
-    #[case(active(7,    0, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),              active( 7,    0, vec![(0, chrgd_bck_dep(3))]))]
-    #[case(active(3,    0, vec![(0, accepted_dep(7))] ), 0, Ok(Transacted),             active(-4,    7, vec![(0, held_dep(7))]     ))]
-    #[case(active(3,    0, vec![(0, accepted_dep(7))] ), 1, Err(NoTransactionFound(1)), active( 3,    0, vec![(0, accepted_dep(7))] ))]
+    //    |------------------ input ---------------------| |------------------------- output -----------------------------------|
+    //     original_account,                            tx                           expected_account
+    //        avail, held, deposits,                    id, expected_status,             avail, held, deposits
+    #[case(active(7,    0, vec![(0, accepted_dep(3))] ), 0, Ok(Transacted),          active( 4,    3, vec![(0, held_dep(3))]     ))]
+    #[case(active(7,    0, vec![(0, held_dep(3))]     ), 0, Ok(Duplicate),           active( 7,    0, vec![(0, held_dep(3))]     ))]
+    #[case(active(7,    0, vec![(0, resolved_dep(3))] ), 0, Ok(Duplicate),           active( 7,    0, vec![(0, resolved_dep(3))] ))]
+    #[case(active(7,    0, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),           active( 7,    0, vec![(0, chrgd_bck_dep(3))]))]
+    #[case(active(3,    0, vec![(0, accepted_dep(7))] ), 0, Ok(Transacted),          active(-4,    7, vec![(0, held_dep(7))]     ))]
+    #[case(active(3,    0, vec![(0, accepted_dep(7))] ), 1, Err(NoTransactionFound), active( 3,    0, vec![(0, accepted_dep(7))] ))]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,

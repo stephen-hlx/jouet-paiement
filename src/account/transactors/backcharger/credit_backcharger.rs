@@ -25,9 +25,9 @@ impl Backcharger for CreditBackcharger {
                     return Ok(SuccessStatus::Transacted);
                 }
                 DepositStatus::ChargedBack => return Ok(SuccessStatus::Duplicate),
-                _ => return Err(BackchargerError::NonDisputedTransaction(transaction_id)),
+                _ => return Err(BackchargerError::NonDisputedTransaction),
             },
-            None => Err(BackchargerError::NoTransactionFound(transaction_id)),
+            None => Err(BackchargerError::NoTransactionFound),
         }
     }
 }
@@ -58,14 +58,14 @@ mod tests {
     #[rstest]
     #[rustfmt::skip(case)]
     // disputing credit transactions
-    //    |------------------ input ----------------------| |---------------------------- output --------------------------------------|
-    //     original_account,                            tx                                  expected_account
-    //        avail, held, deposits,                    id, expected_status,                   avail, held, deposits
-    #[case(active(7,    5, vec![(0, accepted_dep(3))]),  0, Err(NonDisputedTransaction(0)), active(7,    5, vec![(0, accepted_dep(3))]))]
-    #[case(active(7,    5, vec![(0, held_dep(3))]),      0, Ok(Transacted),                 locked(7,    2, vec![(0, chrgd_bck_dep(3))]))]
-    #[case(active(7,    5, vec![(0, resolved_dep(3))]),  0, Err(NonDisputedTransaction(0)), active(7,    5, vec![(0, resolved_dep(3))]))]
-    #[case(active(7,    5, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),                  active(7,    5, vec![(0, chrgd_bck_dep(3))]))]
-    #[case(active(7,    5, vec![(0, chrgd_bck_dep(3))]), 1, Err(NoTransactionFound(1)),     active(7,    5, vec![(0, chrgd_bck_dep(3))]))]
+    //    |------------------ input ----------------------| |---------------------------- output ------------------------------------|
+    //     original_account,                            tx                               expected_account
+    //        avail, held, deposits,                    id, expected_status,                avail, held, deposits
+    #[case(active(7,    5, vec![(0, accepted_dep(3))]),  0, Err(NonDisputedTransaction), active(7,    5, vec![(0, accepted_dep(3))]))]
+    #[case(active(7,    5, vec![(0, held_dep(3))]),      0, Ok(Transacted),              locked(7,    2, vec![(0, chrgd_bck_dep(3))]))]
+    #[case(active(7,    5, vec![(0, resolved_dep(3))]),  0, Err(NonDisputedTransaction), active(7,    5, vec![(0, resolved_dep(3))]))]
+    #[case(active(7,    5, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),               active(7,    5, vec![(0, chrgd_bck_dep(3))]))]
+    #[case(active(7,    5, vec![(0, chrgd_bck_dep(3))]), 1, Err(NoTransactionFound),     active(7,    5, vec![(0, chrgd_bck_dep(3))]))]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,

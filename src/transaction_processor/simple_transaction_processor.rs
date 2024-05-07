@@ -23,9 +23,16 @@ impl TransactionProcessor for SimpleTransactionProcessor {
             .or_insert_with(|| Account::active(client_id));
         let account = binding.value_mut();
 
-        self.account_transaction_processor
-            .transact(account, transaction)?;
-        Ok(())
+        match self
+            .account_transaction_processor
+            .transact(account, transaction.clone())
+        {
+            Ok(_status) => Ok(()),
+            Err(err) => Err(TransactionProcessorError::AccountTransactionError(
+                transaction,
+                err,
+            )),
+        }
     }
 }
 

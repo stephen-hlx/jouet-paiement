@@ -9,8 +9,8 @@ pub(crate) use credit_backcharger::CreditBackcharger;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BackchargerError {
     AccountLocked,
-    NonDisputedTransaction(TransactionId),
-    NoTransactionFound(TransactionId),
+    NonDisputedTransaction,
+    NoTransactionFound,
 }
 
 pub(crate) trait Backcharger {

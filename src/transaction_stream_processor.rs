@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::model::Transaction;
 use crate::{
     model::{ClientId, TransactionId},
     transaction_processor::TransactionProcessorError,
@@ -25,7 +26,7 @@ pub enum TransactionStreamProcessError {
     #[error("Error occurred during parsing the input data: {0}")]
     ParsingError(String),
     #[error("Error occurred during processing the `TransactionRecord` {0:?} due to {1}")]
-    ProcessError(TransactionRecord, String),
+    ProcessError(Transaction, String),
     #[error("Failed to shutdown the processor: {0}")]
     FailedToShutdown(String),
 }
@@ -59,9 +60,9 @@ pub enum TransactionRecordType {
 impl From<TransactionProcessorError> for TransactionStreamProcessError {
     fn from(err: TransactionProcessorError) -> Self {
         match err {
-            TransactionProcessorError::AccountLocked => todo!(),
-            TransactionProcessorError::InvalidTransaction(_) => todo!(),
-            TransactionProcessorError::InternalError(_) => todo!(),
+            TransactionProcessorError::AccountTransactionError(transaction, err) => {
+                Self::ProcessError(transaction, err.to_string())
+            }
         }
     }
 }

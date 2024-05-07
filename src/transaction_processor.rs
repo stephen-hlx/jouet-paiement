@@ -3,6 +3,7 @@ use async_trait::async_trait;
 #[cfg(test)]
 pub use mock::{Blackhole, RecordSink};
 pub use simple_transaction_processor::SimpleTransactionProcessor;
+use thiserror::Error;
 
 use crate::{account::account_transactor::AccountTransactorError, model::Transaction};
 
@@ -15,33 +16,10 @@ pub trait TransactionProcessor {
     async fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TransactionProcessorError {
-    // todo: need an ID
-    AccountLocked,
-    InvalidTransaction(Transaction),
-
-    InternalError(String),
-}
-
-impl From<AccountTransactorError> for TransactionProcessorError {
-    fn from(err: AccountTransactorError) -> Self {
-        match err {
-            AccountTransactorError::MismatchTransactionKind => todo!(),
-            AccountTransactorError::CannotDepositToLockedAccount => Self::AccountLocked,
-            AccountTransactorError::CannotWithdrawFromLockedAccount => todo!(),
-            AccountTransactorError::InsufficientFundForWithdrawal => todo!(),
-            AccountTransactorError::CannotDisputeAgainstLockedAccount => todo!(),
-            AccountTransactorError::NoTransactionFound(_) => todo!(),
-            AccountTransactorError::CannotResolveLockedAccount => todo!(),
-            AccountTransactorError::CannotResolveNonDisputedTransaction(_) => todo!(),
-            AccountTransactorError::CannotChargebackLockedAccount => todo!(),
-            AccountTransactorError::CannotChargebackNonDisputedTransaction(_) => todo!(),
-            AccountTransactorError::AccountLocked(_) => todo!(),
-            AccountTransactorError::TransactionNotFound(_, _) => todo!(),
-            AccountTransactorError::IncompatibleTransaction(_, _) => todo!(),
-        }
-    }
+    #[error("Failed to process transaction: {0:?}. Error: {1}")]
+    AccountTransactionError(Transaction, AccountTransactorError),
 }
 
 #[cfg(test)]

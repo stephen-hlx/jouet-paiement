@@ -9,8 +9,8 @@ pub(crate) use credit_resolver::CreditResolver;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ResolverError {
     AccountLocked,
-    NonDisputedTransaction(TransactionId),
-    NoTransactionFound(TransactionId),
+    NonDisputedTransaction,
+    NoTransactionFound,
 }
 
 pub(crate) trait Resolver {

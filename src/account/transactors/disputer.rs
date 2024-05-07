@@ -10,7 +10,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DisputerError {
     AccountLocked,
-    NoTransactionFound(TransactionId),
+    NoTransactionFound,
 }
 
 pub(crate) trait Disputer {

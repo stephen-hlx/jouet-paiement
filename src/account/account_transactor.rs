@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{
     account::Account,
-    model::{ClientId, Transaction, TransactionId, TransactionKind},
+    model::{Transaction, TransactionKind},
 };
 
 use super::transactors::{
@@ -85,48 +85,25 @@ pub enum SuccessStatus {
     Duplicate,
 }
 
-/// TODO: collapse them into a general one that carries the internal error
-/// from each processor.
 #[derive(Debug, Error, PartialEq, Clone)]
 pub enum AccountTransactorError {
-    /// TODO: can i provide more info here?
-    #[error("Mismatch")]
-    MismatchTransactionKind,
+    #[error("The account is locked")]
+    AccountLocked,
 
-    #[error("The account for client ({0}) is locked.")]
-    AccountLocked(ClientId),
+    #[error("The transaction is incompatible")]
+    IncompatibleTransaction,
 
-    #[error("A previous transaction with id ({0}) is not found for client ({1})")]
-    TransactionNotFound(TransactionId, ClientId),
-
-    #[error("The provided transaction ({0}) is incompatible: {1}")]
-    IncompatibleTransaction(TransactionId, String),
-
-    // todo: collapse those CANNOT ones
-    #[error("Depositing to a locked account is not allowed.")]
-    CannotDepositToLockedAccount,
-    #[error("Withdrawing from a locked account is not allowed.")]
-    CannotWithdrawFromLockedAccount,
-    #[error("There is insufficient fund in the account for the withdrawal requested.")]
+    #[error("Insufficient fund for withdrawal")]
     InsufficientFundForWithdrawal,
-    #[error("Disputing against a locked account is not allowed.")]
-    CannotDisputeAgainstLockedAccount,
-    #[error("The target transaction ({0}) was not found.")]
-    NoTransactionFound(TransactionId),
-    #[error("Resolving a locked account is not allowed.")]
-    CannotResolveLockedAccount,
-    #[error("Resolving a non disputed transaction is not allowed: {0}")]
-    CannotResolveNonDisputedTransaction(TransactionId),
-    #[error("Backcharging a locked account is not allowed.")]
-    CannotChargebackLockedAccount,
-    #[error("Backcharging a non disputed transaction is not allowed: {0}")]
-    CannotChargebackNonDisputedTransaction(TransactionId),
+
+    #[error("No tranasction found")]
+    NoTransactionFound,
 }
 
 impl From<DepositorError> for AccountTransactorError {
     fn from(err: DepositorError) -> Self {
         match err {
-            DepositorError::AccountLocked => Self::CannotDepositToLockedAccount,
+            DepositorError::AccountLocked => Self::AccountLocked,
         }
     }
 }
@@ -134,7 +111,7 @@ impl From<DepositorError> for AccountTransactorError {
 impl From<WithdrawerError> for AccountTransactorError {
     fn from(err: WithdrawerError) -> Self {
         match err {
-            WithdrawerError::AccountLocked => Self::CannotWithdrawFromLockedAccount,
+            WithdrawerError::AccountLocked => Self::AccountLocked,
             WithdrawerError::InsufficientFund => Self::InsufficientFundForWithdrawal,
         }
     }
@@ -143,10 +120,8 @@ impl From<WithdrawerError> for AccountTransactorError {
 impl From<DisputerError> for AccountTransactorError {
     fn from(err: DisputerError) -> Self {
         match err {
-            DisputerError::AccountLocked => Self::CannotDisputeAgainstLockedAccount,
-            DisputerError::NoTransactionFound(transaction_id) => {
-                Self::NoTransactionFound(transaction_id)
-            }
+            DisputerError::AccountLocked => Self::AccountLocked,
+            DisputerError::NoTransactionFound => Self::NoTransactionFound,
         }
     }
 }
@@ -154,13 +129,9 @@ impl From<DisputerError> for AccountTransactorError {
 impl From<ResolverError> for AccountTransactorError {
     fn from(err: ResolverError) -> Self {
         match err {
-            ResolverError::AccountLocked => Self::CannotResolveLockedAccount,
-            ResolverError::NonDisputedTransaction(txn_id) => {
-                Self::CannotResolveNonDisputedTransaction(txn_id)
-            }
-            ResolverError::NoTransactionFound(transaction_id) => {
-                Self::NoTransactionFound(transaction_id)
-            }
+            ResolverError::AccountLocked => Self::AccountLocked,
+            ResolverError::NonDisputedTransaction => Self::IncompatibleTransaction,
+            ResolverError::NoTransactionFound => Self::NoTransactionFound,
         }
     }
 }
@@ -168,13 +139,9 @@ impl From<ResolverError> for AccountTransactorError {
 impl From<BackchargerError> for AccountTransactorError {
     fn from(err: BackchargerError) -> Self {
         match err {
-            BackchargerError::AccountLocked => Self::CannotChargebackLockedAccount,
-            BackchargerError::NoTransactionFound(transaction_id) => {
-                Self::NoTransactionFound(transaction_id)
-            }
-            BackchargerError::NonDisputedTransaction(transaction_id) => {
-                Self::CannotChargebackNonDisputedTransaction(transaction_id)
-            }
+            BackchargerError::AccountLocked => Self::AccountLocked,
+            BackchargerError::NoTransactionFound => Self::NoTransactionFound,
+            BackchargerError::NonDisputedTransaction => Self::IncompatibleTransaction,
         }
     }
 }
@@ -248,10 +215,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(
-        DepositorError::AccountLocked,
-        AccountTransactorError::CannotDepositToLockedAccount
-    )]
+    #[case(DepositorError::AccountLocked, AccountTransactorError::AccountLocked)]
     fn error_returned_from_depositor_is_propagated(
         #[case] depositor_error: DepositorError,
         #[case] expected_error: AccountTransactorError,
@@ -305,10 +269,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(
-        WithdrawerError::AccountLocked,
-        AccountTransactorError::CannotWithdrawFromLockedAccount
-    )]
+    #[case(WithdrawerError::AccountLocked, AccountTransactorError::AccountLocked)]
     #[case(
         WithdrawerError::InsufficientFund,
         AccountTransactorError::InsufficientFundForWithdrawal
@@ -365,13 +326,10 @@ mod tests {
     }
 
     #[rstest]
+    #[case(DisputerError::AccountLocked, AccountTransactorError::AccountLocked)]
     #[case(
-        DisputerError::AccountLocked,
-        AccountTransactorError::CannotDisputeAgainstLockedAccount
-    )]
-    #[case(
-        DisputerError::NoTransactionFound(0),
-        AccountTransactorError::NoTransactionFound(0)
+        DisputerError::NoTransactionFound,
+        AccountTransactorError::NoTransactionFound
     )]
     fn error_returned_from_disputer_is_propagated(
         #[case] disputer_error: DisputerError,
@@ -424,17 +382,14 @@ mod tests {
     }
 
     #[rstest]
+    #[case(ResolverError::AccountLocked, AccountTransactorError::AccountLocked)]
     #[case(
-        ResolverError::AccountLocked,
-        AccountTransactorError::CannotResolveLockedAccount
+        ResolverError::NoTransactionFound,
+        AccountTransactorError::NoTransactionFound
     )]
     #[case(
-        ResolverError::NoTransactionFound(0),
-        AccountTransactorError::NoTransactionFound(0)
-    )]
-    #[case(
-        ResolverError::NonDisputedTransaction(0),
-        AccountTransactorError::CannotResolveNonDisputedTransaction(0)
+        ResolverError::NonDisputedTransaction,
+        AccountTransactorError::IncompatibleTransaction
     )]
     fn error_returned_from_resolver_is_propagated(
         #[case] disputer_error: ResolverError,
@@ -487,17 +442,14 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BackchargerError::AccountLocked, AccountTransactorError::AccountLocked)]
     #[case(
-        BackchargerError::AccountLocked,
-        AccountTransactorError::CannotChargebackLockedAccount
+        BackchargerError::NoTransactionFound,
+        AccountTransactorError::NoTransactionFound
     )]
     #[case(
-        BackchargerError::NoTransactionFound(0),
-        AccountTransactorError::NoTransactionFound(0)
-    )]
-    #[case(
-        BackchargerError::NonDisputedTransaction(0),
-        AccountTransactorError::CannotChargebackNonDisputedTransaction(0)
+        BackchargerError::NonDisputedTransaction,
+        AccountTransactorError::IncompatibleTransaction
     )]
     fn error_returned_from_backcharger_is_propagated(
         #[case] disputer_error: BackchargerError,
