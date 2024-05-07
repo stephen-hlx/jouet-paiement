@@ -223,15 +223,14 @@ mod tests {
         #[case] expected: Result<(), TransactionStreamProcessError>,
     ) {
         let accounts = Arc::new(DashMap::new());
-        let account_transaction_processor = SimpleAccountTransactor::new();
-        let transaction_processor = SimpleTransactionProcessor::new(
-            accounts.clone(),
-            Box::new(account_transaction_processor),
-        );
-        let senders_and_handles = DashMap::new();
 
-        let processor =
-            AsyncCsvStreamProcessor::new(Arc::new(transaction_processor), senders_and_handles);
+        let processor = AsyncCsvStreamProcessor::new(
+            Arc::new(SimpleTransactionProcessor::new(
+                accounts.clone(),
+                Box::new(SimpleAccountTransactor::new()),
+            )),
+            DashMap::new(),
+        );
         processor.process(input.as_bytes()).await.unwrap();
         assert_eq!(processor.shutdown().await, expected);
     }
@@ -243,13 +242,11 @@ mod tests {
         #[case] expected: Result<(), TransactionStreamProcessError>,
     ) {
         let accounts = Arc::new(DashMap::new());
-        let account_transaction_processor = SimpleAccountTransactor::new();
-        let transaction_processor = SimpleTransactionProcessor::new(
-            accounts.clone(),
-            Box::new(account_transaction_processor),
-        );
 
-        let processor = CsvStreamProcessor::new(Box::new(transaction_processor));
+        let processor = CsvStreamProcessor::new(Box::new(SimpleTransactionProcessor::new(
+            accounts.clone(),
+            Box::new(SimpleAccountTransactor::new()),
+        )));
         assert_eq!(processor.process(input.as_bytes()).await, expected);
     }
 

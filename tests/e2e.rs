@@ -21,13 +21,14 @@ use jouet_paiement::{
 #[tokio::test]
 async fn e2e_small_input_using_async_processor() {
     let accounts = Arc::new(DashMap::new());
-    let account_transaction_processor = SimpleAccountTransactor::new();
-    let transaction_processor =
-        SimpleTransactionProcessor::new(accounts.clone(), Box::new(account_transaction_processor));
-    let senders_and_handles = DashMap::new();
 
-    let processor =
-        AsyncCsvStreamProcessor::new(Arc::new(transaction_processor), senders_and_handles);
+    let processor = AsyncCsvStreamProcessor::new(
+        Arc::new(SimpleTransactionProcessor::new(
+            accounts.clone(),
+            Box::new(SimpleAccountTransactor::new()),
+        )),
+        DashMap::new(),
+    );
 
     let file = File::open("tests/small_input.txt").unwrap();
     let reader = BufReader::new(file);
@@ -54,13 +55,14 @@ async fn e2e_small_input_using_async_processor() {
 #[tokio::test]
 async fn e2e_small_input_with_transaction_process_error_using_async_processor() {
     let accounts = Arc::new(DashMap::new());
-    let account_transaction_processor = SimpleAccountTransactor::new();
-    let transaction_processor =
-        SimpleTransactionProcessor::new(accounts.clone(), Box::new(account_transaction_processor));
-    let senders_and_handles = DashMap::new();
 
-    let processor =
-        AsyncCsvStreamProcessor::new(Arc::new(transaction_processor), senders_and_handles);
+    let processor = AsyncCsvStreamProcessor::new(
+        Arc::new(SimpleTransactionProcessor::new(
+            accounts.clone(),
+            Box::new(SimpleAccountTransactor::new()),
+        )),
+        DashMap::new(),
+    );
 
     let file = File::open("tests/small_input_with_transaction_process_error.txt").unwrap();
     let reader = BufReader::new(file);
@@ -91,13 +93,14 @@ async fn e2e_small_input_with_transaction_process_error_using_async_processor() 
 #[ignore = "this test takes time to run and should be enabled ondemand"]
 async fn e2e_large_input_using_async_processor() {
     let accounts = Arc::new(DashMap::new());
-    let account_transaction_processor = SimpleAccountTransactor::new();
-    let transaction_processor =
-        SimpleTransactionProcessor::new(accounts.clone(), Box::new(account_transaction_processor));
-    let senders_and_handles = DashMap::new();
 
-    let processor =
-        AsyncCsvStreamProcessor::new(Arc::new(transaction_processor), senders_and_handles);
+    let processor = AsyncCsvStreamProcessor::new(
+        Arc::new(SimpleTransactionProcessor::new(
+            accounts.clone(),
+            Box::new(SimpleAccountTransactor::new()),
+        )),
+        DashMap::new(),
+    );
 
     create_test_file("/tmp/large_input.txt", create_test_records(10, 1_000_000));
     let file = File::open("/tmp/large_input.txt").unwrap();
@@ -134,11 +137,11 @@ async fn e2e_large_input_using_async_processor() {
 #[ignore = "this test takes time to run and should be enabled ondemand"]
 async fn e2e_large_input_using_blocking_processor() {
     let accounts = Arc::new(DashMap::new());
-    let account_transaction_processor = SimpleAccountTransactor::new();
-    let transaction_processor =
-        SimpleTransactionProcessor::new(accounts.clone(), Box::new(account_transaction_processor));
 
-    let processor = CsvStreamProcessor::new(Box::new(transaction_processor));
+    let processor = CsvStreamProcessor::new(Box::new(SimpleTransactionProcessor::new(
+        accounts.clone(),
+        Box::new(SimpleAccountTransactor::new()),
+    )));
 
     create_test_file("/tmp/large_input.txt", create_test_records(10, 1_000_000));
     let file = File::open("/tmp/large_input.txt").unwrap();

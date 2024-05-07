@@ -1,4 +1,9 @@
-use std::{env, fs::File, io::BufReader, sync::Arc};
+use std::{
+    env,
+    fs::File,
+    io::{BufReader, Read},
+    sync::Arc,
+};
 
 use dashmap::DashMap;
 
@@ -22,23 +27,25 @@ mod transaction_stream_processor;
 async fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = args.get(1).unwrap();
+    let file = File::open(filename).unwrap();
+    let reader = BufReader::new(file);
 
-    let result = process_file(filename).await;
+    let result = process_file(reader).await;
     println!("{result}");
 }
 
-async fn process_file(filename: &str) -> String {
+async fn process_file(reader: impl Read + Send) -> String {
     let accounts = Arc::new(DashMap::new());
-    let account_transaction_processor = SimpleAccountTransactor::new();
-    let transaction_processor =
-        SimpleTransactionProcessor::new(accounts.clone(), Box::new(account_transaction_processor));
-    let senders_and_handles = DashMap::new();
 
-    let processor =
-        AsyncCsvStreamProcessor::new(Arc::new(transaction_processor), senders_and_handles);
-    let file = File::open(filename).unwrap();
+    let processor = AsyncCsvStreamProcessor::new(
+        Arc::new(SimpleTransactionProcessor::new(
+            accounts.clone(),
+            Box::new(SimpleAccountTransactor::new()),
+        )),
+        DashMap::new(),
+    );
 
-    processor.process(BufReader::new(file)).await.unwrap();
+    processor.process(reader).await.unwrap();
     processor.shutdown().await.unwrap();
     let summaries: Vec<AccountSummary> = accounts
         .iter()
