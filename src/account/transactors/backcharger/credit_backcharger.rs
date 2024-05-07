@@ -13,21 +13,31 @@ impl Backcharger for CreditBackcharger {
         account: &mut Account,
         transaction_id: TransactionId,
     ) -> Result<SuccessStatus, BackchargerError> {
-        if account.status == AccountStatus::Locked {
-            return Err(BackchargerError::AccountLocked);
-        }
         match account.deposits.get_mut(&transaction_id) {
             Some(deposit) => match deposit.status {
                 DepositStatus::Held => {
+                    if account.status == AccountStatus::Locked {
+                        return Err(BackchargerError::AccountLocked);
+                    }
                     account.account_snapshot.held.0 -= deposit.amount.0;
                     deposit.status = DepositStatus::ChargedBack;
                     account.status = AccountStatus::Locked;
                     return Ok(SuccessStatus::Transacted);
                 }
                 DepositStatus::ChargedBack => return Ok(SuccessStatus::Duplicate),
-                _ => return Err(BackchargerError::NonDisputedTransaction),
+                _ => {
+                    if account.status == AccountStatus::Locked {
+                        return Err(BackchargerError::AccountLocked);
+                    }
+                    return Err(BackchargerError::NonDisputedTransaction);
+                }
             },
-            None => Err(BackchargerError::NoTransactionFound),
+            None => {
+                if account.status == AccountStatus::Locked {
+                    return Err(BackchargerError::AccountLocked);
+                }
+                Err(BackchargerError::NoTransactionFound)
+            }
         }
     }
 }
@@ -43,6 +53,7 @@ mod tests {
             account_transactor::SuccessStatus::Duplicate,
             account_transactor::SuccessStatus::Transacted,
             transactors::backcharger::BackchargerError,
+            transactors::backcharger::BackchargerError::AccountLocked,
             transactors::backcharger::BackchargerError::NoTransactionFound,
             transactors::backcharger::BackchargerError::NonDisputedTransaction,
             Account, AccountSnapshot,
@@ -61,11 +72,17 @@ mod tests {
     //    |------------------ input ----------------------| |---------------------------- output ------------------------------------|
     //     original_account,                            tx                               expected_account
     //        avail, held, deposits,                    id, expected_status,                avail, held, deposits
-    #[case(active(7,    5, vec![(0, accepted_dep(3))]),  0, Err(NonDisputedTransaction), active(7,    5, vec![(0, accepted_dep(3))]))]
+    #[case(active(7,    5, vec![(0, accepted_dep(3))]),  0, Err(NonDisputedTransaction), active(7,    5, vec![(0, accepted_dep(3))]) )]
     #[case(active(7,    5, vec![(0, held_dep(3))]),      0, Ok(Transacted),              locked(7,    2, vec![(0, chrgd_bck_dep(3))]))]
-    #[case(active(7,    5, vec![(0, resolved_dep(3))]),  0, Err(NonDisputedTransaction), active(7,    5, vec![(0, resolved_dep(3))]))]
+    #[case(active(7,    5, vec![(0, resolved_dep(3))]),  0, Err(NonDisputedTransaction), active(7,    5, vec![(0, resolved_dep(3))]) )]
     #[case(active(7,    5, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),               active(7,    5, vec![(0, chrgd_bck_dep(3))]))]
     #[case(active(7,    5, vec![(0, chrgd_bck_dep(3))]), 1, Err(NoTransactionFound),     active(7,    5, vec![(0, chrgd_bck_dep(3))]))]
+    // locked cases
+    #[case(locked(7,    5, vec![(0, accepted_dep(3))]),  0, Err(AccountLocked),          locked(7,    5, vec![(0, accepted_dep(3))]) )]
+    #[case(locked(7,    5, vec![(0, held_dep(3))]),      0, Err(AccountLocked),          locked(7,    5, vec![(0, held_dep(3))])     )]
+    #[case(locked(7,    5, vec![(0, resolved_dep(3))]),  0, Err(AccountLocked),          locked(7,    5, vec![(0, resolved_dep(3))]) )]
+    #[case(locked(7,    5, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),               locked(7,    5, vec![(0, chrgd_bck_dep(3))]))]
+    #[case(locked(7,    5, vec![(0, chrgd_bck_dep(3))]), 1, Err(AccountLocked),          locked(7,    5, vec![(0, chrgd_bck_dep(3))]))]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
@@ -78,16 +95,6 @@ mod tests {
             expected_status
         );
         assert_eq!(original, expected);
-    }
-
-    #[test]
-    fn locked_account_case() {
-        let resolver = CreditBackcharger;
-        let mut account = account(Locked, 0, 0, vec![], vec![]);
-        assert_eq!(
-            resolver.chargeback(&mut account, 0),
-            Err(BackchargerError::AccountLocked)
-        );
     }
 
     fn locked(available: i64, held: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {

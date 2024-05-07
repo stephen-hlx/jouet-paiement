@@ -28,15 +28,15 @@ impl Depositor for SimpleDepositor {
         transaction_id: TransactionId,
         amount: Amount,
     ) -> Result<SuccessStatus, DepositorError> {
-        if account.status == AccountStatus::Locked {
-            return Err(DepositorError::AccountLocked);
-        }
         match account.deposits.get(&transaction_id) {
             Some(existing) => {
                 assert_eq!(existing.amount, amount);
                 Ok(SuccessStatus::Duplicate)
             }
             None => {
+                if account.status == AccountStatus::Locked {
+                    return Err(DepositorError::AccountLocked);
+                }
                 account.account_snapshot.available.0 += amount.0;
                 account.deposits.insert(
                     transaction_id,
@@ -125,8 +125,6 @@ pub(crate) mod mock {
 mod tests {
     use std::collections::HashMap;
 
-    use assert_matches::assert_matches;
-
     use rstest::rstest;
 
     use crate::{
@@ -135,6 +133,7 @@ mod tests {
             account_transactor::SuccessStatus::Duplicate,
             account_transactor::SuccessStatus::Transacted,
             transactors::depositor::DepositorError,
+            transactors::depositor::DepositorError::AccountLocked,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
             Deposit, DepositStatus,
@@ -146,16 +145,22 @@ mod tests {
     use super::SimpleDepositor;
 
     #[rstest]
-    //    |------------------- input ------------------| |-------------------------------------- output -------------------------------------------------------|
+    //    |------------------- input ------------------| |-------------------- output --------------------------------------------------|
     //
-    //     original_account,                   tx_id,                                                expected_account
-    //        avail, deposits,                   amount, expected_status                             avail,  deposits
-    #[case(active(0, vec![]),                      0, 3, Ok(Transacted),                             active(3, vec![(0, accepted_dep(3))])                      )]
-    #[case(active(3, vec![(0, accepted_dep(3))]),  0, 3, Ok(Duplicate),                              active(3, vec![(0, accepted_dep(3))])                      )]
-    #[case(active(3, vec![(0, held_dep(3))]),      0, 3, Ok(Duplicate),                              active(3, vec![(0, held_dep(3))])                          )]
-    #[case(active(3, vec![(0, resolved_dep(3))]),  0, 3, Ok(Duplicate),                              active(3, vec![(0, resolved_dep(3))])                      )]
-    #[case(active(3, vec![(0, chrgd_bck_dep(3))]), 0, 3, Ok(Duplicate),                              active(3, vec![(0, chrgd_bck_dep(3))])                     )]
-    #[case(active(3, vec![(0, accepted_dep(3))]),  2, 5, Ok(Transacted),                             active(8, vec![(0, accepted_dep(3)), (2, accepted_dep(5))]))]
+    //     original_account,                   tx_id,                        expected_account
+    //        avail, deposits,                   amount, expected_status     avail,  deposits
+    #[case(active(0, vec![]),                      0, 3, Ok(Transacted),     active(3, vec![(0, accepted_dep(3))])                      )]
+    #[case(active(3, vec![(0, accepted_dep(3))]),  0, 3, Ok(Duplicate),      active(3, vec![(0, accepted_dep(3))])                      )]
+    #[case(active(3, vec![(0, held_dep(3))]),      0, 3, Ok(Duplicate),      active(3, vec![(0, held_dep(3))])                          )]
+    #[case(active(3, vec![(0, resolved_dep(3))]),  0, 3, Ok(Duplicate),      active(3, vec![(0, resolved_dep(3))])                      )]
+    #[case(active(3, vec![(0, chrgd_bck_dep(3))]), 0, 3, Ok(Duplicate),      active(3, vec![(0, chrgd_bck_dep(3))])                     )]
+    #[case(active(3, vec![(0, accepted_dep(3))]),  2, 5, Ok(Transacted),     active(8, vec![(0, accepted_dep(3)), (2, accepted_dep(5))]))]
+    // locked cases
+    #[case(locked(3, vec![(0, accepted_dep(3))]),  0, 3, Ok(Duplicate),      locked(3, vec![(0, accepted_dep(3))])                      )]
+    #[case(locked(3, vec![(0, held_dep(3))]),      0, 3, Ok(Duplicate),      locked(3, vec![(0, held_dep(3))])                          )]
+    #[case(locked(3, vec![(0, resolved_dep(3))]),  0, 3, Ok(Duplicate),      locked(3, vec![(0, resolved_dep(3))])                      )]
+    #[case(locked(3, vec![(0, chrgd_bck_dep(3))]), 0, 3, Ok(Duplicate),      locked(3, vec![(0, chrgd_bck_dep(3))])                     )]
+    #[case(locked(3, vec![(0, accepted_dep(3))]),  1, 3, Err(AccountLocked), locked(3, vec![(0, accepted_dep(3))])                      )]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
@@ -171,18 +176,12 @@ mod tests {
         assert_eq!(original, expected);
     }
 
-    #[test]
-    fn deposit_to_locked_account_returns_error() {
-        let mut account = account(Locked, 0, 0, vec![]);
-        let depositor = SimpleDepositor;
-        assert_matches!(
-            depositor.deposit(&mut account, 1, amount(10)),
-            Err(DepositorError::AccountLocked)
-        );
-    }
-
     fn active(available: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {
         account(Active, available, 0, deposits)
+    }
+
+    fn locked(available: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {
+        account(Locked, available, 0, deposits)
     }
 
     fn account(

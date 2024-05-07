@@ -13,12 +13,12 @@ impl Disputer for CreditDisputer {
         account: &mut Account,
         transaction_id: TransactionId,
     ) -> Result<SuccessStatus, DisputerError> {
-        if account.status == AccountStatus::Locked {
-            return Err(DisputerError::AccountLocked);
-        }
         match account.deposits.get_mut(&transaction_id) {
             Some(deposit) => match deposit.status {
                 DepositStatus::Accepted => {
+                    if account.status == AccountStatus::Locked {
+                        return Err(DisputerError::AccountLocked);
+                    }
                     account.account_snapshot.available.0 -= deposit.amount.0;
                     account.account_snapshot.held.0 += deposit.amount.0;
                     deposit.status = DepositStatus::Held;
@@ -26,7 +26,12 @@ impl Disputer for CreditDisputer {
                 }
                 _ => return Ok(SuccessStatus::Duplicate),
             },
-            None => Err(DisputerError::NoTransactionFound),
+            None => {
+                if account.status == AccountStatus::Locked {
+                    return Err(DisputerError::AccountLocked);
+                }
+                Err(DisputerError::NoTransactionFound)
+            }
         }
     }
 }
@@ -42,6 +47,7 @@ mod tests {
             account_transactor::SuccessStatus::Duplicate,
             account_transactor::SuccessStatus::Transacted,
             transactors::disputer::DisputerError,
+            transactors::disputer::DisputerError::AccountLocked,
             transactors::disputer::DisputerError::NoTransactionFound,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
@@ -65,6 +71,12 @@ mod tests {
     #[case(active(7,    0, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),           active( 7,    0, vec![(0, chrgd_bck_dep(3))]))]
     #[case(active(3,    0, vec![(0, accepted_dep(7))] ), 0, Ok(Transacted),          active(-4,    7, vec![(0, held_dep(7))]     ))]
     #[case(active(3,    0, vec![(0, accepted_dep(7))] ), 1, Err(NoTransactionFound), active( 3,    0, vec![(0, accepted_dep(7))] ))]
+    // locked cases
+    #[case(locked(7,    0, vec![(0, accepted_dep(3))] ), 0, Err(AccountLocked),      locked( 7,    0, vec![(0, accepted_dep(3))] ))]
+    #[case(locked(7,    0, vec![(0, accepted_dep(3))] ), 1, Err(AccountLocked),      locked( 7,    0, vec![(0, accepted_dep(3))] ))]
+    #[case(locked(7,    0, vec![(0, held_dep(3))]     ), 0, Ok(Duplicate),           locked( 7,    0, vec![(0, held_dep(3))]     ))]
+    #[case(locked(7,    0, vec![(0, resolved_dep(3))] ), 0, Ok(Duplicate),           locked( 7,    0, vec![(0, resolved_dep(3))] ))]
+    #[case(locked(7,    0, vec![(0, chrgd_bck_dep(3))]), 0, Ok(Duplicate),           locked( 7,    0, vec![(0, chrgd_bck_dep(3))]))]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
@@ -79,18 +91,12 @@ mod tests {
         assert_eq!(original, expected);
     }
 
-    #[test]
-    fn disputing_a_locked_account_returns_error() {
-        let disputer = CreditDisputer;
-        let mut account = account(Locked, 0, 0, vec![], vec![]);
-        assert_eq!(
-            disputer.dispute(&mut account, 0),
-            Err(DisputerError::AccountLocked)
-        );
-    }
-
     fn active(available: i64, held: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {
         account(Active, available, held, deposits, vec![])
+    }
+
+    fn locked(available: i64, held: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {
+        account(Locked, available, held, deposits, vec![])
     }
 
     fn account(

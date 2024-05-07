@@ -30,10 +30,10 @@ impl Withdrawer for SimpleWithdrawer {
         transaction_id: TransactionId,
         amount: Amount,
     ) -> Result<SuccessStatus, WithdrawerError> {
-        if account.status == AccountStatus::Locked {
-            return Err(WithdrawerError::AccountLocked);
-        }
-        if amount.0 != 0 && account.account_snapshot.available.0 < amount.0 {
+        if account.status != AccountStatus::Locked
+            && amount.0 != 0
+            && account.account_snapshot.available.0 < amount.0
+        {
             return Err(WithdrawerError::InsufficientFund);
         }
         match account.withdrawals.get(&transaction_id) {
@@ -42,6 +42,9 @@ impl Withdrawer for SimpleWithdrawer {
                 Ok(SuccessStatus::Duplicate)
             }
             None => {
+                if account.status == AccountStatus::Locked {
+                    return Err(WithdrawerError::AccountLocked);
+                }
                 account.account_snapshot.available.0 -= amount.0;
                 account.withdrawals.insert(
                     transaction_id,
@@ -130,7 +133,6 @@ pub(crate) mod mock {
 mod tests {
     use std::collections::HashMap;
 
-    use assert_matches::assert_matches;
     use rstest::rstest;
 
     use crate::account::account_transactor::SuccessStatus;
@@ -138,6 +140,7 @@ mod tests {
         account::{
             account_transactor::SuccessStatus::Duplicate,
             account_transactor::SuccessStatus::Transacted,
+            transactors::withdrawer::WithdrawerError::AccountLocked,
             transactors::withdrawer::WithdrawerError::InsufficientFund,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
@@ -162,6 +165,9 @@ mod tests {
     #[case(active(7, vec![]),                      0,      7, Ok(Transacted),        active(0, vec![(0, accepted_wdr(7))])                      )]
     #[case(active(7, vec![(0, accepted_wdr(3))]),  0,      3, Ok(Duplicate),         active(7, vec![(0, accepted_wdr(3))])                      )]
     #[case(active(7, vec![(0, accepted_wdr(3))]),  1,      5, Ok(Transacted),        active(2, vec![(0, accepted_wdr(3)), (1, accepted_wdr(5))]))]
+    // locked cases
+    #[case(locked(7, vec![(0, accepted_wdr(3))]),  0,      3, Ok(Duplicate),         locked(7, vec![(0, accepted_wdr(3))])                      )]
+    #[case(locked(7, vec![(0, accepted_wdr(3))]),  1,      3, Err(AccountLocked),    locked(7, vec![(0, accepted_wdr(3))])                      )]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
@@ -177,18 +183,12 @@ mod tests {
         assert_eq!(original, expected);
     }
 
-    #[test]
-    fn withdrawal_from_locked_account_returns_error() {
-        let mut account = account(Locked, 0, 0, vec![]);
-        let withdrawer = SimpleWithdrawer;
-        assert_matches!(
-            withdrawer.withdraw(&mut account, 1, amount(10)),
-            Err(WithdrawerError::AccountLocked)
-        );
-    }
-
     fn active(available: i64, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
         account(Active, available, 0, withdrawals)
+    }
+
+    fn locked(available: i64, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
+        account(Locked, available, 0, withdrawals)
     }
 
     fn account(
