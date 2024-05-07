@@ -51,8 +51,8 @@ $ cargo run -- tests/small_input_with_transaction_process_error.txt
     running out of time so in the submitted work, withdrawals are **not**
     disputable.
     You can find the test cases in appendix.
-1. Can an account available go negative? (a potentially missing `Pending` status
-of deposit transactions)\
+1. Can the available amount go negative? (a potentially missing `Pending`
+status of deposit transactions)\
     Consider following transaction sequence for a client: \
     ```
     type,       transaction_id, amount
@@ -88,7 +88,7 @@ of deposit transactions)\
             Cases like, a "resolve" is applied to a non disputed deposit,
             indicate a potential severe issue (could be records getting out of
             order by the requirement says that the records are already ordered
-            chronologically), so that process of the file fails.
+            chronologically), so the process of the file fails.
         - InsufficientFundForWithdrawal (suppressed) \
             The account will not be updated on such cases and the process of
             the file continues.
@@ -153,7 +153,7 @@ thousands of concurrent TCP streams?\
 It will still work with following limit:
     - All CSV files to be processed in parallel do not have common clients.\
         The reason is that the process of transactions from a single client
-        needs to be total ordered, while process of transactions from different
+        needs to be total-ordered, while process of transactions from different
         clients can be done in any order
 
 
