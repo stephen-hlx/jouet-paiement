@@ -37,7 +37,10 @@ impl Withdrawer for SimpleWithdrawer {
             return Err(WithdrawerError::InsufficientFund);
         }
         match account.withdrawals.get(&transaction_id) {
-            Some(_) => Ok(SuccessStatus::Duplicate),
+            Some(existing) => {
+                assert_eq!(existing.amount, amount);
+                Ok(SuccessStatus::Duplicate)
+            }
             None => {
                 account.account_snapshot.available.0 -= amount.0;
                 account.withdrawals.insert(

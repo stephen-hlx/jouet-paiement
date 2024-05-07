@@ -32,7 +32,10 @@ impl Depositor for SimpleDepositor {
             return Err(DepositorError::AccountLocked);
         }
         match account.deposits.get(&transaction_id) {
-            Some(_) => Ok(SuccessStatus::Duplicate),
+            Some(existing) => {
+                assert_eq!(existing.amount, amount);
+                Ok(SuccessStatus::Duplicate)
+            }
             None => {
                 account.account_snapshot.available.0 += amount.0;
                 account.deposits.insert(
