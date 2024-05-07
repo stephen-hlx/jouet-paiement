@@ -1,11 +1,14 @@
 use crate::{
-    account::{Account, AccountStatus, Deposit, DepositStatus::Accepted},
+    account::{
+        account_transactor::SuccessStatus, Account, AccountStatus, Deposit, DepositStatus::Accepted,
+    },
     model::{Amount, TransactionId},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DepositorError {
     AccountLocked,
+    ConflictingWithPreviousTransaction(TransactionId),
 }
 
 pub(crate) trait Depositor {
@@ -14,7 +17,7 @@ pub(crate) trait Depositor {
         account: &mut Account,
         transaction_id: TransactionId,
         amount: Amount,
-    ) -> Result<(), DepositorError>;
+    ) -> Result<SuccessStatus, DepositorError>;
 }
 
 pub(crate) struct SimpleDepositor;
@@ -25,19 +28,34 @@ impl Depositor for SimpleDepositor {
         account: &mut Account,
         transaction_id: TransactionId,
         amount: Amount,
-    ) -> Result<(), DepositorError> {
+    ) -> Result<SuccessStatus, DepositorError> {
         if account.status == AccountStatus::Locked {
             return Err(DepositorError::AccountLocked);
         }
-        account.account_snapshot.available.0 += amount.0;
-        account.deposits.insert(
-            transaction_id,
-            Deposit {
-                amount,
-                status: Accepted,
-            },
-        );
-        Ok(())
+        match account.deposits.get(&transaction_id) {
+            Some(deposit) => {
+                if deposit.amount.0 == amount.0 {
+                    Ok(SuccessStatus::NoOp(
+                        crate::account::account_transactor::NoOpReason::Duplicate,
+                    ))
+                } else {
+                    Err(DepositorError::ConflictingWithPreviousTransaction(
+                        transaction_id,
+                    ))
+                }
+            }
+            None => {
+                account.account_snapshot.available.0 += amount.0;
+                account.deposits.insert(
+                    transaction_id,
+                    Deposit {
+                        amount,
+                        status: Accepted,
+                    },
+                );
+                Ok(SuccessStatus::Transacted)
+            }
+        }
     }
 }
 
@@ -47,7 +65,7 @@ pub(crate) mod mock {
     use std::sync::{Arc, Mutex};
 
     use crate::{
-        account::Account,
+        account::{account_transactor::SuccessStatus, Account},
         model::{Amount, TransactionId},
     };
 
@@ -56,7 +74,7 @@ pub(crate) mod mock {
     pub(crate) struct MockDepositor {
         expected_requests: Arc<Mutex<Vec<(Account, TransactionId, Amount)>>>,
         actual_requests: Arc<Mutex<Vec<(Account, TransactionId, Amount)>>>,
-        return_vals: Arc<Mutex<Vec<Result<(), DepositorError>>>>,
+        return_vals: Arc<Mutex<Vec<Result<SuccessStatus, DepositorError>>>>,
     }
 
     impl MockDepositor {
@@ -80,7 +98,7 @@ pub(crate) mod mock {
                 .push((account.clone(), transaction_id, amount));
         }
 
-        pub(crate) fn to_return(&self, result: Result<(), DepositorError>) {
+        pub(crate) fn to_return(&self, result: Result<SuccessStatus, DepositorError>) {
             self.return_vals.lock().unwrap().push(result);
         }
     }
@@ -91,7 +109,7 @@ pub(crate) mod mock {
             account: &mut Account,
             transaction_id: TransactionId,
             amount: Amount,
-        ) -> Result<(), DepositorError> {
+        ) -> Result<SuccessStatus, DepositorError> {
             self.actual_requests
                 .lock()
                 .unwrap()
@@ -121,7 +139,12 @@ mod tests {
 
     use crate::{
         account::{
+            account_transactor::NoOpReason::Duplicate,
+            account_transactor::SuccessStatus,
+            account_transactor::SuccessStatus::NoOp,
+            account_transactor::SuccessStatus::Transacted,
             transactors::depositor::DepositorError,
+            transactors::depositor::DepositorError::ConflictingWithPreviousTransaction,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
             Deposit, DepositStatus,
@@ -133,31 +156,32 @@ mod tests {
     use super::SimpleDepositor;
 
     #[rstest]
-    //    |-------------------- input -----------------------------| |--------------------- output ----------------------------------|
-    //                                                   tx
-    //     original_account,                             id, amount, expected_account
-    //         avail, held, deposits,                                   avail,  held, deposits
-    #[case(active(-3,    0, vec![]),                      2,     10, active( 7,    0, vec![(2, accepted_dep(10))])                       )]
-    #[case(active( 0,    0, vec![]),                      2,     10, active(10,    0, vec![(2, accepted_dep(10))])                       )]
-    #[case(active( 3,    0, vec![]),                      2,     10, active(13,    0, vec![(2, accepted_dep(10))])                       )]
-    #[case(active( 0,    0, vec![(0, accepted_dep(3))]),  2,     10, active(10,    0, vec![(0, accepted_dep(3)), (2, accepted_dep(10))]) )]
-    #[case(active( 0,    0, vec![(0, held_dep(3))]),      2,     10, active(10,    0, vec![(0, held_dep(3)), (2, accepted_dep(10))])     )]
-    #[case(active( 0,    0, vec![(0, resolved_dep(3))]),  2,     10, active(10,    0, vec![(0, resolved_dep(3)), (2, accepted_dep(10))]) )]
-    #[case(active( 0,    0, vec![(0, chrgd_bck_dep(3))]), 2,     10, active(10,    0, vec![(0, chrgd_bck_dep(3)), (2, accepted_dep(10))]))]
-    #[case(active( 2,    6, vec![(0, accepted_dep(3))]),  2,     10, active(12,    6, vec![(0, accepted_dep(3)), (2, accepted_dep(10))]) )]
-    #[case(active( 2,    6, vec![(0, held_dep(3))]),      2,     10, active(12,    6, vec![(0, held_dep(3)), (2, accepted_dep(10))])     )]
-    #[case(active( 2,    6, vec![(0, resolved_dep(3))]),  2,     10, active(12,    6, vec![(0, resolved_dep(3)), (2, accepted_dep(10))]) )]
-    #[case(active( 2,    6, vec![(0, chrgd_bck_dep(3))]), 2,     10, active(12,    6, vec![(0, chrgd_bck_dep(3)), (2, accepted_dep(10))]))]
+    //    |------------------- input ------------------| |-------------------------------------- output -------------------------------------------------------|
+    //
+    //     original_account,                   tx_id,                                                expected_account
+    //        avail, deposits,                   amount, expected_status                             avail,  deposits
+    #[case(active(0, vec![]),                      0, 3, Ok(Transacted),                             active(3, vec![(0, accepted_dep(3))])                      )]
+    #[case(active(3, vec![(0, accepted_dep(3))]),  0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, accepted_dep(3))])                      )]
+    #[case(active(3, vec![(0, held_dep(3))]),      0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, held_dep(3))])                          )]
+    #[case(active(3, vec![(0, resolved_dep(3))]),  0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, resolved_dep(3))])                      )]
+    #[case(active(3, vec![(0, chrgd_bck_dep(3))]), 0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, chrgd_bck_dep(3))])                     )]
+    #[case(active(3, vec![(0, accepted_dep(3))]),  0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, accepted_dep(3))])                      )]
+    #[case(active(3, vec![(0, held_dep(3))]),      0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, held_dep(3))])                          )]
+    #[case(active(3, vec![(0, resolved_dep(3))]),  0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, resolved_dep(3))])                      )]
+    #[case(active(3, vec![(0, chrgd_bck_dep(3))]), 0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, chrgd_bck_dep(3))])                     )]
+    #[case(active(3, vec![(0, accepted_dep(3))]),  2, 5, Ok(Transacted),                             active(8, vec![(0, accepted_dep(3)), (2, accepted_dep(5))]))]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
         #[case] amount_i64: i64,
+        #[case] expected_status: Result<SuccessStatus, DepositorError>,
         #[case] expected: Account,
     ) {
         let depositor = SimpleDepositor;
-        depositor
-            .deposit(&mut original, transaction_id, amount(amount_i64))
-            .unwrap();
+        assert_eq!(
+            depositor.deposit(&mut original, transaction_id, amount(amount_i64)),
+            expected_status
+        );
         assert_eq!(original, expected);
     }
 
@@ -171,8 +195,8 @@ mod tests {
         );
     }
 
-    fn active(available: i64, held: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {
-        account(Active, available, held, deposits)
+    fn active(available: i64, deposits: Vec<(TransactionId, Deposit)>) -> Account {
+        account(Active, available, 0, deposits)
     }
 
     fn account(
