@@ -8,7 +8,7 @@ use crate::{
 use super::transactors::{
     backcharger::{Backcharger, BackchargerError, CreditDebitBackcharger},
     depositor::{Depositor, DepositorError, SimpleDepositor},
-    disputer::{CreditDebitDisputer, Disputer, DisputerError},
+    disputer::{CreditDisputer, Disputer, DisputerError},
     resolver::{CreditResolver, Resolver, ResolverError},
     withdrawer::{SimpleWithdrawer, Withdrawer, WithdrawerError},
 };
@@ -47,7 +47,9 @@ impl AccountTransactor for SimpleAccountTransactor {
             TransactionKind::Withdrawal { amount } => {
                 let _status = self.withdrawer.withdraw(account, transaction_id, amount)?;
             }
-            TransactionKind::Dispute => self.disputer.dispute(account, transaction_id)?,
+            TransactionKind::Dispute => {
+                let _status = self.disputer.dispute(account, transaction_id)?;
+            }
             TransactionKind::Resolve => {
                 let _status = self.resolver.resolve(account, transaction_id)?;
             }
@@ -61,7 +63,7 @@ impl SimpleAccountTransactor {
     pub fn new() -> Self {
         let depositor = SimpleDepositor;
         let withdrawer = SimpleWithdrawer;
-        let disputer = CreditDebitDisputer;
+        let disputer = CreditDisputer;
         let resolver = CreditResolver;
         let backcharger = CreditDebitBackcharger;
 
@@ -139,7 +141,9 @@ impl From<DisputerError> for AccountTransactorError {
     fn from(err: DisputerError) -> Self {
         match err {
             DisputerError::AccountLocked => Self::CannotDisputeAgainstLockedAccount,
-            DisputerError::NoTransactionFound => Self::NoTransactionFound(0),
+            DisputerError::NoTransactionFound(transaction_id) => {
+                Self::NoTransactionFound(transaction_id)
+            }
         }
     }
 }
@@ -342,7 +346,7 @@ mod tests {
         let resolver = MockResolver::new();
         let backcharger = MockBackcharger::new();
         disputer.expect(&mut account, transaction_id);
-        disputer.to_return(Ok(()));
+        disputer.to_return(Ok(super::SuccessStatus::Transacted));
         let processor = SimpleAccountTransactor::new_for_test(
             depositor,
             withdrawer,
@@ -359,7 +363,7 @@ mod tests {
         AccountTransactorError::CannotDisputeAgainstLockedAccount
     )]
     #[case(
-        DisputerError::NoTransactionFound,
+        DisputerError::NoTransactionFound(0),
         AccountTransactorError::NoTransactionFound(0)
     )]
     fn error_returned_from_disputer_is_propagated(

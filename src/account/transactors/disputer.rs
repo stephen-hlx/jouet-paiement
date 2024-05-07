@@ -1,13 +1,16 @@
-mod credit_debit_disputer;
+// mod credit_debit_disputer;
 mod credit_disputer;
-pub(crate) use credit_debit_disputer::CreditDebitDisputer;
+pub(crate) use credit_disputer::CreditDisputer;
 
-use crate::{account::Account, model::TransactionId};
+use crate::{
+    account::{account_transactor::SuccessStatus, Account},
+    model::TransactionId,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DisputerError {
     AccountLocked,
-    NoTransactionFound,
+    NoTransactionFound(TransactionId),
 }
 
 pub(crate) trait Disputer {
@@ -15,7 +18,7 @@ pub(crate) trait Disputer {
         &self,
         account: &mut Account,
         transaction_id: TransactionId,
-    ) -> Result<(), DisputerError>;
+    ) -> Result<SuccessStatus, DisputerError>;
 }
 
 #[cfg(test)]
@@ -23,14 +26,17 @@ pub(crate) mod mock {
 
     use std::sync::{Arc, Mutex};
 
-    use crate::{account::Account, model::TransactionId};
+    use crate::{
+        account::{account_transactor::SuccessStatus, Account},
+        model::TransactionId,
+    };
 
     use super::{Disputer, DisputerError};
 
     pub(crate) struct MockDisputer {
         expected_requests: Arc<Mutex<Vec<(Account, TransactionId)>>>,
         actual_requests: Arc<Mutex<Vec<(Account, TransactionId)>>>,
-        return_vals: Arc<Mutex<Vec<Result<(), DisputerError>>>>,
+        return_vals: Arc<Mutex<Vec<Result<SuccessStatus, DisputerError>>>>,
     }
 
     impl MockDisputer {
@@ -49,7 +55,7 @@ pub(crate) mod mock {
                 .push((account.clone(), transaction_id));
         }
 
-        pub(crate) fn to_return(&self, result: Result<(), DisputerError>) {
+        pub(crate) fn to_return(&self, result: Result<SuccessStatus, DisputerError>) {
             self.return_vals.lock().unwrap().push(result);
         }
     }
@@ -59,7 +65,7 @@ pub(crate) mod mock {
             &self,
             account: &mut Account,
             transaction_id: TransactionId,
-        ) -> Result<(), DisputerError> {
+        ) -> Result<SuccessStatus, DisputerError> {
             self.actual_requests
                 .lock()
                 .unwrap()
