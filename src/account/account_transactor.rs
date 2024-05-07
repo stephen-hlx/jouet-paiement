@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::transactors::{
-    backcharger::{Backcharger, BackchargerError, CreditDebitBackcharger},
+    backcharger::{Backcharger, BackchargerError, CreditBackcharger},
     depositor::{Depositor, DepositorError, SimpleDepositor},
     disputer::{CreditDisputer, Disputer, DisputerError},
     resolver::{CreditResolver, Resolver, ResolverError},
@@ -53,7 +53,9 @@ impl AccountTransactor for SimpleAccountTransactor {
             TransactionKind::Resolve => {
                 let _status = self.resolver.resolve(account, transaction_id)?;
             }
-            TransactionKind::ChargeBack => self.backcharger.chargeback(account, transaction_id)?,
+            TransactionKind::ChargeBack => {
+                let _status = self.backcharger.chargeback(account, transaction_id)?;
+            }
         }
         Ok(())
     }
@@ -65,7 +67,7 @@ impl SimpleAccountTransactor {
         let withdrawer = SimpleWithdrawer;
         let disputer = CreditDisputer;
         let resolver = CreditResolver;
-        let backcharger = CreditDebitBackcharger;
+        let backcharger = CreditBackcharger;
 
         Self {
             depositor: Box::new(depositor),
@@ -100,6 +102,7 @@ pub enum AccountTransactorError {
     #[error("The provided transaction ({0}) is incompatible: {1}")]
     IncompatibleTransaction(TransactionId, String),
 
+    // todo: collapse those CANNOT ones
     #[error("Depositing to a locked account is not allowed.")]
     CannotDepositToLockedAccount,
     #[error("Withdrawing from a locked account is not allowed.")]
@@ -166,10 +169,12 @@ impl From<BackchargerError> for AccountTransactorError {
     fn from(err: BackchargerError) -> Self {
         match err {
             BackchargerError::AccountLocked => Self::CannotChargebackLockedAccount,
-            BackchargerError::CannotChargebackNonDisputedTransaction(txn_id) => {
-                Self::CannotChargebackNonDisputedTransaction(txn_id)
+            BackchargerError::NoTransactionFound(transaction_id) => {
+                Self::NoTransactionFound(transaction_id)
             }
-            BackchargerError::NoTransactionFound => Self::NoTransactionFound(0),
+            BackchargerError::NonDisputedTransaction(transaction_id) => {
+                Self::CannotChargebackNonDisputedTransaction(transaction_id)
+            }
         }
     }
 }
@@ -196,7 +201,9 @@ mod tests {
         },
     };
 
-    use super::{AccountTransactor, AccountTransactorError, SimpleAccountTransactor};
+    use super::{
+        AccountTransactor, AccountTransactorError, SimpleAccountTransactor, SuccessStatus,
+    };
 
     impl SimpleAccountTransactor {
         fn new_for_test(
@@ -229,7 +236,7 @@ mod tests {
         let resolver = MockResolver::new();
         let backcharger = MockBackcharger::new();
         depositor.expect(&mut account, transaction_id, amount);
-        depositor.to_return(Ok(super::SuccessStatus::Transacted));
+        depositor.to_return(Ok(SuccessStatus::Transacted));
         let processor = SimpleAccountTransactor::new_for_test(
             depositor,
             withdrawer,
@@ -286,7 +293,7 @@ mod tests {
         let resolver = MockResolver::new();
         let backcharger = MockBackcharger::new();
         withdrawer.expect(&mut account, transaction_id, amount);
-        withdrawer.to_return(Ok(super::SuccessStatus::Transacted));
+        withdrawer.to_return(Ok(SuccessStatus::Transacted));
         let processor = SimpleAccountTransactor::new_for_test(
             depositor,
             withdrawer,
@@ -346,7 +353,7 @@ mod tests {
         let resolver = MockResolver::new();
         let backcharger = MockBackcharger::new();
         disputer.expect(&mut account, transaction_id);
-        disputer.to_return(Ok(super::SuccessStatus::Transacted));
+        disputer.to_return(Ok(SuccessStatus::Transacted));
         let processor = SimpleAccountTransactor::new_for_test(
             depositor,
             withdrawer,
@@ -405,7 +412,7 @@ mod tests {
         let resolver = MockResolver::new();
         let backcharger = MockBackcharger::new();
         resolver.expect(&mut account, transaction_id);
-        resolver.to_return(Ok(super::SuccessStatus::Transacted));
+        resolver.to_return(Ok(SuccessStatus::Transacted));
         let processor = SimpleAccountTransactor::new_for_test(
             depositor,
             withdrawer,
@@ -468,7 +475,7 @@ mod tests {
         let resolver = MockResolver::new();
         let backcharger = MockBackcharger::new();
         backcharger.expect(&mut account, transaction_id);
-        backcharger.to_return(Ok(()));
+        backcharger.to_return(Ok(SuccessStatus::Transacted));
         let processor = SimpleAccountTransactor::new_for_test(
             depositor,
             withdrawer,
@@ -485,11 +492,11 @@ mod tests {
         AccountTransactorError::CannotChargebackLockedAccount
     )]
     #[case(
-        BackchargerError::NoTransactionFound,
+        BackchargerError::NoTransactionFound(0),
         AccountTransactorError::NoTransactionFound(0)
     )]
     #[case(
-        BackchargerError::CannotChargebackNonDisputedTransaction(0),
+        BackchargerError::NonDisputedTransaction(0),
         AccountTransactorError::CannotChargebackNonDisputedTransaction(0)
     )]
     fn error_returned_from_backcharger_is_propagated(

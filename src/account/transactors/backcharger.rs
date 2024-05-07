@@ -1,13 +1,16 @@
 mod credit_backcharger;
-mod credit_debit_backcharger;
-use crate::{account::Account, model::TransactionId};
-pub(crate) use credit_debit_backcharger::CreditDebitBackcharger;
+// mod credit_debit_backcharger;
+use crate::{
+    account::{account_transactor::SuccessStatus, Account},
+    model::TransactionId,
+};
+pub(crate) use credit_backcharger::CreditBackcharger;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BackchargerError {
     AccountLocked,
-    CannotChargebackNonDisputedTransaction(TransactionId),
-    NoTransactionFound,
+    NonDisputedTransaction(TransactionId),
+    NoTransactionFound(TransactionId),
 }
 
 pub(crate) trait Backcharger {
@@ -15,7 +18,7 @@ pub(crate) trait Backcharger {
         &self,
         account: &mut Account,
         transaction_id: TransactionId,
-    ) -> Result<(), BackchargerError>;
+    ) -> Result<SuccessStatus, BackchargerError>;
 }
 
 #[cfg(test)]
@@ -23,14 +26,17 @@ pub(crate) mod mock {
 
     use std::sync::{Arc, Mutex};
 
-    use crate::{account::Account, model::TransactionId};
+    use crate::{
+        account::{account_transactor::SuccessStatus, Account},
+        model::TransactionId,
+    };
 
     use super::{Backcharger, BackchargerError};
 
     pub(crate) struct MockBackcharger {
         expected_requests: Arc<Mutex<Vec<(Account, TransactionId)>>>,
         actual_requests: Arc<Mutex<Vec<(Account, TransactionId)>>>,
-        return_vals: Arc<Mutex<Vec<Result<(), BackchargerError>>>>,
+        return_vals: Arc<Mutex<Vec<Result<SuccessStatus, BackchargerError>>>>,
     }
 
     impl MockBackcharger {
@@ -49,7 +55,7 @@ pub(crate) mod mock {
                 .push((account.clone(), transaction_id));
         }
 
-        pub(crate) fn to_return(&self, result: Result<(), BackchargerError>) {
+        pub(crate) fn to_return(&self, result: Result<SuccessStatus, BackchargerError>) {
             self.return_vals.lock().unwrap().push(result);
         }
     }
@@ -59,7 +65,7 @@ pub(crate) mod mock {
             &self,
             account: &mut Account,
             transaction_id: TransactionId,
-        ) -> Result<(), BackchargerError> {
+        ) -> Result<SuccessStatus, BackchargerError> {
             self.actual_requests
                 .lock()
                 .unwrap()
