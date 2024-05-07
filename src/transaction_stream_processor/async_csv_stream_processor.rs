@@ -57,7 +57,14 @@ impl AsyncCsvStreamProcessor {
             .entry(client_id)
             .or_insert_with(|| self.create_channel());
         let sender = &binding.0;
-        sender.send(transaction).await.unwrap();
+        match sender.send(transaction).await {
+            Ok(_) => {}
+            Err(err) => {
+                return Err(TransactionStreamProcessError::InternalError(
+                    err.to_string(),
+                ));
+            }
+        };
         Ok(())
     }
 

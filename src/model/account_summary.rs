@@ -37,7 +37,14 @@ impl AccountSummaryCsvWriter {
     pub fn write(summaries: Vec<AccountSummary>) -> Result<Vec<u8>, AccountSummaryWriterError> {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         for summary in summaries {
-            wtr.serialize(summary).unwrap();
+            match wtr.serialize(summary) {
+                Ok(_) => {}
+                Err(err) => {
+                    return Err(AccountSummaryWriterError::SerialisationError(
+                        err.to_string(),
+                    ))
+                }
+            };
         }
         match wtr.into_inner() {
             Ok(chars) => Ok(chars),

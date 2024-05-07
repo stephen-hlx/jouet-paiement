@@ -36,6 +36,8 @@ pub enum TransactionStreamProcessError {
     ProcessError(TransactionProcessorError),
     #[error("Failed to shutdown the processor: {0}")]
     FailedToShutdown(String),
+    #[error("An internal error has occurred: {0}")]
+    InternalError(String),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
