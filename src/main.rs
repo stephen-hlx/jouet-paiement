@@ -1,11 +1,15 @@
 use std::{env, fs::File, io::BufReader, sync::Arc};
 
 use dashmap::DashMap;
-use jouet_paiement::account::SimpleAccountTransactor;
-use jouet_paiement::model::{AccountSummary, AccountSummaryCsvWriter};
-use jouet_paiement::transaction_processor::SimpleTransactionProcessor;
-use jouet_paiement::transaction_stream_processor::async_csv_stream_processor::AsyncCsvStreamProcessor;
-use jouet_paiement::transaction_stream_processor::TransactionStreamProcessor;
+
+use crate::{
+    account::SimpleAccountTransactor,
+    model::{AccountSummary, AccountSummaryCsvWriter},
+    transaction_processor::SimpleTransactionProcessor,
+    transaction_stream_processor::{
+        async_csv_stream_processor::AsyncCsvStreamProcessor, TransactionStreamProcessor,
+    },
+};
 #[cfg(test)]
 use rstest_reuse;
 
@@ -18,6 +22,7 @@ mod transaction_stream_processor;
 async fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = args.get(1).unwrap();
+
     let result = process_file(filename).await;
     println!("{result}");
 }

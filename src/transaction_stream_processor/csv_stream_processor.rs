@@ -31,6 +31,9 @@ impl TransactionStreamProcessor for CsvStreamProcessor {
 }
 
 impl CsvStreamProcessor {
+    // This struct is an early stage of implementation.
+    // It is only used in test code now.
+    #[allow(dead_code)]
     pub fn new(consumer: Box<dyn TransactionProcessor + Send + Sync>) -> Self {
         Self { consumer }
     }
