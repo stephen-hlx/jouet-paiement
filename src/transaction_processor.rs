@@ -16,7 +16,7 @@ pub trait TransactionProcessor {
     async fn process(&self, transaction: Transaction) -> Result<(), TransactionProcessorError>;
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Clone)]
 pub enum TransactionProcessorError {
     #[error("Failed to process transaction: {0:?}. Error: {1}")]
     AccountTransactionError(Transaction, AccountTransactorError),

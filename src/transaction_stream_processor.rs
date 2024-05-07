@@ -1,5 +1,6 @@
 pub mod async_csv_stream_processor;
 pub mod csv_stream_processor;
+mod error_handler;
 mod transaction_record_converter;
 
 use std::{io::Read, num::ParseFloatError};
@@ -10,7 +11,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::model::Transaction;
 use crate::{
     model::{ClientId, TransactionId},
     transaction_processor::TransactionProcessorError,
@@ -21,12 +21,19 @@ pub trait TransactionStreamProcessor {
     async fn process(&self, r: impl Read + Send) -> Result<(), TransactionStreamProcessError>;
 }
 
-#[derive(Debug, Error)]
+trait ErrorHandler {
+    fn handle(
+        &self,
+        transaction_processor_error: TransactionProcessorError,
+    ) -> Result<(), TransactionProcessorError>;
+}
+
+#[derive(Debug, Error, PartialEq, Clone)]
 pub enum TransactionStreamProcessError {
     #[error("Error occurred during parsing the input data: {0}")]
     ParsingError(String),
-    #[error("Error occurred during processing the `TransactionRecord` {0:?} due to {1}")]
-    ProcessError(Transaction, String),
+    #[error("Error occurred during processing the `TransactionRecord` {0:?}")]
+    ProcessError(TransactionProcessorError),
     #[error("Failed to shutdown the processor: {0}")]
     FailedToShutdown(String),
 }
@@ -60,9 +67,7 @@ pub enum TransactionRecordType {
 impl From<TransactionProcessorError> for TransactionStreamProcessError {
     fn from(err: TransactionProcessorError) -> Self {
         match err {
-            TransactionProcessorError::AccountTransactionError(transaction, err) => {
-                Self::ProcessError(transaction, err.to_string())
-            }
+            TransactionProcessorError::AccountTransactionError(_, _) => Self::ProcessError(err),
         }
     }
 }
@@ -82,6 +87,10 @@ mod tests {
     use rstest::rstest;
     use rstest_reuse::{apply, template};
 
+    use super::TransactionStreamProcessError;
+    use crate::account::account_transactor::AccountTransactorError::{
+        self, AccountLocked, IncompatibleTransaction,
+    };
     use crate::account::AccountStatus::Active;
     use crate::account::DepositStatus::Accepted;
     use crate::account::{Account, AccountSnapshot, Deposit, SimpleAccountTransactor, Withdrawal};
@@ -92,7 +101,9 @@ mod tests {
     use crate::model::{
         Amount4DecimalBased, ClientId, Transaction, TransactionId, TransactionKind,
     };
-    use crate::transaction_processor::{RecordSink, SimpleTransactionProcessor};
+    use crate::transaction_processor::{
+        RecordSink, SimpleTransactionProcessor, TransactionProcessorError,
+    };
 
     #[template]
     #[rstest]
@@ -128,9 +139,9 @@ mod tests {
             dispute(7, 8),
             resolve(9, 10),
             chargeback(11, 12)])]
-    fn valid_csv_cases(#[case] input: &str, #[case] expected: Vec<Transaction>) {}
+    fn happy_path_cases(#[case] input: &str, #[case] expected: Vec<Transaction>) {}
 
-    #[apply(valid_csv_cases)]
+    #[apply(happy_path_cases)]
     #[tokio::test]
     async fn csv_parsing_works_for_async_stream_processor(
         #[case] input: &str,
@@ -148,7 +159,7 @@ mod tests {
         assert_eq!(*records.lock().unwrap(), expected);
     }
 
-    #[apply(valid_csv_cases)]
+    #[apply(happy_path_cases)]
     #[tokio::test]
     async fn csv_parsing_works_for_simple_stream_processor(
         #[case] input: &str,
@@ -161,6 +172,83 @@ mod tests {
         let processor = CsvStreamProcessor::new(Box::new(record_sink));
         processor.process(input.as_bytes()).await.unwrap();
         assert_eq!(*records.lock().unwrap(), expected);
+    }
+
+    #[template]
+    #[rstest]
+    #[case("
+    type,       client, tx, amount
+    deposit,         1,  1,    3.0
+    deposit,         2,  2,    3.0
+    withdrawal,      2,  3,    6.0",
+            Ok(()))]
+    #[case(
+        "
+    type,       client, tx, amount
+    deposit,         1,  1,    3.0
+    deposit,         2,  2,    3.0
+    resolve,         2,  2,",
+        Err(TransactionStreamProcessError::ProcessError(incompatible(Transaction {
+            client_id: 2,
+            transaction_id: 2,
+            kind: TransactionKind::Resolve
+        })))
+    )]
+    #[case(
+        "
+    type,       client, tx, amount
+    deposit,         1,  1,    3.0
+    deposit,         2,  2,    3.0
+    dispute,         2,  2,
+    chargeback,      2,  2,
+    deposit,         2,  3,    1.0",
+        Err(TransactionStreamProcessError::ProcessError(account_lock(Transaction {
+            client_id: 2,
+            transaction_id: 3,
+            kind: TransactionKind::Deposit { amount: Amount4DecimalBased(10_000) }
+        })))
+    )]
+    fn transaction_error_cases(
+        #[case] input: &str,
+        #[case] expected: Result<(), TransactionStreamProcessError>,
+    ) {
+    }
+
+    #[apply(transaction_error_cases)]
+    #[tokio::test]
+    async fn async_stream_processor_can_handle_errors_correctly(
+        #[case] input: &str,
+        #[case] expected: Result<(), TransactionStreamProcessError>,
+    ) {
+        let accounts = Arc::new(DashMap::new());
+        let account_transaction_processor = SimpleAccountTransactor::new();
+        let transaction_processor = SimpleTransactionProcessor::new(
+            accounts.clone(),
+            Box::new(account_transaction_processor),
+        );
+        let senders_and_handles = DashMap::new();
+
+        let processor =
+            AsyncCsvStreamProcessor::new(Arc::new(transaction_processor), senders_and_handles);
+        processor.process(input.as_bytes()).await.unwrap();
+        assert_eq!(processor.shutdown().await, expected);
+    }
+
+    #[apply(transaction_error_cases)]
+    #[tokio::test]
+    async fn csv_stream_processor_can_handle_errors_correctly(
+        #[case] input: &str,
+        #[case] expected: Result<(), TransactionStreamProcessError>,
+    ) {
+        let accounts = Arc::new(DashMap::new());
+        let account_transaction_processor = SimpleAccountTransactor::new();
+        let transaction_processor = SimpleTransactionProcessor::new(
+            accounts.clone(),
+            Box::new(account_transaction_processor),
+        );
+
+        let processor = CsvStreamProcessor::new(Box::new(transaction_processor));
+        assert_eq!(processor.process(input.as_bytes()).await, expected);
     }
 
     #[tokio::test]
@@ -271,5 +359,20 @@ mod tests {
             amount: Amount4DecimalBased(amount),
             status: Accepted,
         }
+    }
+
+    fn account_lock(transaction: Transaction) -> TransactionProcessorError {
+        transaction_processor_error(transaction, AccountLocked)
+    }
+
+    fn incompatible(transaction: Transaction) -> TransactionProcessorError {
+        transaction_processor_error(transaction, IncompatibleTransaction)
+    }
+
+    fn transaction_processor_error(
+        transaction: Transaction,
+        account_transactor_error: AccountTransactorError,
+    ) -> TransactionProcessorError {
+        TransactionProcessorError::AccountTransactionError(transaction, account_transactor_error)
     }
 }

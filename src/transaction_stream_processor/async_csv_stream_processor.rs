@@ -14,8 +14,8 @@ use crate::{
 };
 
 use super::{
-    transaction_record_converter::to_transaction, TransactionStreamProcessError,
-    TransactionStreamProcessor,
+    error_handler::SimpleErrorHandler, transaction_record_converter::to_transaction, ErrorHandler,
+    TransactionStreamProcessError, TransactionStreamProcessor,
 };
 
 pub struct AsyncCsvStreamProcessor {
@@ -27,6 +27,7 @@ pub struct AsyncCsvStreamProcessor {
             JoinHandle<Result<(), TransactionProcessorError>>,
         ),
     >,
+    error_handler: Arc<dyn ErrorHandler + Send + Sync>,
 }
 
 #[async_trait]
@@ -69,9 +70,13 @@ impl AsyncCsvStreamProcessor {
         // TODO: make this configurable
         let (sender, mut receiver) = channel::<Transaction>(256);
         let clone = self.transaction_processor.clone();
+        let error_handler_clone = self.error_handler.clone();
         let handle = tokio::spawn(async move {
             while let Some(transaction) = receiver.recv().await {
-                clone.process(transaction).await?;
+                match clone.process(transaction).await {
+                    Ok(_) => {}
+                    Err(err) => error_handler_clone.handle(err)?,
+                };
             }
             Ok(())
         });
@@ -88,9 +93,11 @@ impl AsyncCsvStreamProcessor {
             ),
         >,
     ) -> Self {
+        let error_handler = SimpleErrorHandler;
         Self {
             transaction_processor: consumer,
             senders_and_handles,
+            error_handler: Arc::new(error_handler),
         }
     }
 
@@ -98,7 +105,12 @@ impl AsyncCsvStreamProcessor {
         for (_, (sender, handle)) in self.senders_and_handles {
             drop(sender);
             match handle.await {
-                Ok(_) => {}
+                Ok(process_reesult) => match process_reesult {
+                    Ok(_) => {}
+                    Err(process_err) => {
+                        return Err(TransactionStreamProcessError::ProcessError(process_err));
+                    }
+                },
                 Err(e) => {
                     return Err(TransactionStreamProcessError::FailedToShutdown(
                         e.to_string(),
