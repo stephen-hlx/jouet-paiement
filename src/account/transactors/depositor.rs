@@ -8,7 +8,6 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DepositorError {
     AccountLocked,
-    ConflictingWithPreviousTransaction(TransactionId),
 }
 
 pub(crate) trait Depositor {
@@ -33,17 +32,7 @@ impl Depositor for SimpleDepositor {
             return Err(DepositorError::AccountLocked);
         }
         match account.deposits.get(&transaction_id) {
-            Some(deposit) => {
-                if deposit.amount.0 == amount.0 {
-                    Ok(SuccessStatus::NoOp(
-                        crate::account::account_transactor::NoOpReason::Duplicate,
-                    ))
-                } else {
-                    Err(DepositorError::ConflictingWithPreviousTransaction(
-                        transaction_id,
-                    ))
-                }
-            }
+            Some(_) => Ok(SuccessStatus::Duplicate),
             None => {
                 account.account_snapshot.available.0 += amount.0;
                 account.deposits.insert(
@@ -139,12 +128,10 @@ mod tests {
 
     use crate::{
         account::{
-            account_transactor::NoOpReason::Duplicate,
             account_transactor::SuccessStatus,
-            account_transactor::SuccessStatus::NoOp,
+            account_transactor::SuccessStatus::Duplicate,
             account_transactor::SuccessStatus::Transacted,
             transactors::depositor::DepositorError,
-            transactors::depositor::DepositorError::ConflictingWithPreviousTransaction,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
             Deposit, DepositStatus,
@@ -161,14 +148,10 @@ mod tests {
     //     original_account,                   tx_id,                                                expected_account
     //        avail, deposits,                   amount, expected_status                             avail,  deposits
     #[case(active(0, vec![]),                      0, 3, Ok(Transacted),                             active(3, vec![(0, accepted_dep(3))])                      )]
-    #[case(active(3, vec![(0, accepted_dep(3))]),  0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, accepted_dep(3))])                      )]
-    #[case(active(3, vec![(0, held_dep(3))]),      0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, held_dep(3))])                          )]
-    #[case(active(3, vec![(0, resolved_dep(3))]),  0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, resolved_dep(3))])                      )]
-    #[case(active(3, vec![(0, chrgd_bck_dep(3))]), 0, 3, Ok(NoOp(Duplicate)),                        active(3, vec![(0, chrgd_bck_dep(3))])                     )]
-    #[case(active(3, vec![(0, accepted_dep(3))]),  0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, accepted_dep(3))])                      )]
-    #[case(active(3, vec![(0, held_dep(3))]),      0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, held_dep(3))])                          )]
-    #[case(active(3, vec![(0, resolved_dep(3))]),  0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, resolved_dep(3))])                      )]
-    #[case(active(3, vec![(0, chrgd_bck_dep(3))]), 0, 4, Err(ConflictingWithPreviousTransaction(0)), active(3, vec![(0, chrgd_bck_dep(3))])                     )]
+    #[case(active(3, vec![(0, accepted_dep(3))]),  0, 3, Ok(Duplicate),                              active(3, vec![(0, accepted_dep(3))])                      )]
+    #[case(active(3, vec![(0, held_dep(3))]),      0, 3, Ok(Duplicate),                              active(3, vec![(0, held_dep(3))])                          )]
+    #[case(active(3, vec![(0, resolved_dep(3))]),  0, 3, Ok(Duplicate),                              active(3, vec![(0, resolved_dep(3))])                      )]
+    #[case(active(3, vec![(0, chrgd_bck_dep(3))]), 0, 3, Ok(Duplicate),                              active(3, vec![(0, chrgd_bck_dep(3))])                     )]
     #[case(active(3, vec![(0, accepted_dep(3))]),  2, 5, Ok(Transacted),                             active(8, vec![(0, accepted_dep(3)), (2, accepted_dep(5))]))]
     fn active_account_cases(
         #[case] mut original: Account,

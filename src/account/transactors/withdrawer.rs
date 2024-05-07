@@ -1,9 +1,12 @@
 use crate::{
-    account::{Account, AccountStatus, Withdrawal, WithdrawalStatus::Accepted},
+    account::{
+        account_transactor::SuccessStatus, Account, AccountStatus, Withdrawal,
+        WithdrawalStatus::Accepted,
+    },
     model::{Amount, TransactionId},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum WithdrawerError {
     AccountLocked,
     InsufficientFund,
@@ -15,7 +18,7 @@ pub(crate) trait Withdrawer {
         account: &mut Account,
         transaction_id: TransactionId,
         amount: Amount,
-    ) -> Result<(), WithdrawerError>;
+    ) -> Result<SuccessStatus, WithdrawerError>;
 }
 
 pub(crate) struct SimpleWithdrawer;
@@ -26,22 +29,27 @@ impl Withdrawer for SimpleWithdrawer {
         account: &mut Account,
         transaction_id: TransactionId,
         amount: Amount,
-    ) -> Result<(), WithdrawerError> {
+    ) -> Result<SuccessStatus, WithdrawerError> {
         if account.status == AccountStatus::Locked {
             return Err(WithdrawerError::AccountLocked);
         }
         if amount.0 != 0 && account.account_snapshot.available.0 < amount.0 {
             return Err(WithdrawerError::InsufficientFund);
         }
-        account.account_snapshot.available.0 -= amount.0;
-        account.withdrawals.insert(
-            transaction_id,
-            Withdrawal {
-                amount,
-                status: Accepted,
-            },
-        );
-        Ok(())
+        match account.withdrawals.get(&transaction_id) {
+            Some(_) => Ok(SuccessStatus::Duplicate),
+            None => {
+                account.account_snapshot.available.0 -= amount.0;
+                account.withdrawals.insert(
+                    transaction_id,
+                    Withdrawal {
+                        amount,
+                        status: Accepted,
+                    },
+                );
+                Ok(SuccessStatus::Transacted)
+            }
+        }
     }
 }
 
@@ -51,7 +59,7 @@ pub(crate) mod mock {
     use std::sync::{Arc, Mutex};
 
     use crate::{
-        account::Account,
+        account::{account_transactor::SuccessStatus, Account},
         model::{Amount, TransactionId},
     };
 
@@ -60,7 +68,7 @@ pub(crate) mod mock {
     pub(crate) struct MockWithdrawer {
         expected_requests: Arc<Mutex<Vec<(Account, TransactionId, Amount)>>>,
         actual_requests: Arc<Mutex<Vec<(Account, TransactionId, Amount)>>>,
-        return_vals: Arc<Mutex<Vec<Result<(), WithdrawerError>>>>,
+        return_vals: Arc<Mutex<Vec<Result<SuccessStatus, WithdrawerError>>>>,
     }
 
     impl MockWithdrawer {
@@ -84,7 +92,7 @@ pub(crate) mod mock {
                 .push((account.clone(), transaction_id, amount));
         }
 
-        pub(crate) fn to_return(&self, result: Result<(), WithdrawerError>) {
+        pub(crate) fn to_return(&self, result: Result<SuccessStatus, WithdrawerError>) {
             self.return_vals.lock().unwrap().push(result);
         }
     }
@@ -95,7 +103,7 @@ pub(crate) mod mock {
             account: &mut Account,
             transaction_id: TransactionId,
             amount: Amount,
-        ) -> Result<(), WithdrawerError> {
+        ) -> Result<SuccessStatus, WithdrawerError> {
             self.actual_requests
                 .lock()
                 .unwrap()
@@ -122,9 +130,12 @@ mod tests {
     use assert_matches::assert_matches;
     use rstest::rstest;
 
+    use crate::account::account_transactor::SuccessStatus;
     use crate::{
         account::{
-            transactors::withdrawer::WithdrawerError,
+            account_transactor::SuccessStatus::Duplicate,
+            account_transactor::SuccessStatus::Transacted,
+            transactors::withdrawer::WithdrawerError::InsufficientFund,
             Account, AccountSnapshot,
             AccountStatus::{self, Active, Locked},
             Withdrawal, WithdrawalStatus,
@@ -132,55 +143,35 @@ mod tests {
         model::{Amount, Amount4DecimalBased, TransactionId},
     };
 
+    use super::WithdrawerError;
+
     use super::SimpleWithdrawer;
     use super::Withdrawer;
 
     #[rstest]
-    //    |-------------------- input -----------------------------| |--------------------- output ----------------------------------|
-    //                                                   tx
-    //     original_account,                             id, amount, expected_account
-    //         avail, held,  existing withdrawals,                        avail, held, existing withdrawals
-    #[case(active( 0,    0,  vec![]),                      2,      0, active( 0,    0, vec![(2, accepted_wdr(0))])                       )]
-    #[case(active( 7,    0,  vec![]),                      2,      4, active( 3,    0, vec![(2, accepted_wdr(4))])                       )]
-    #[case(active( 7,    0,  vec![]),                      2,      7, active( 0,    0, vec![(2, accepted_wdr(7))])                       )]
-    #[case(active( 7,    0,  vec![(0, accepted_wdr(3))]),  2,      0, active( 7,    0, vec![(0, accepted_wdr(3)), (2, accepted_wdr(0))]) )]
-    #[case(active( 7,    0,  vec![(0, held_wdr(3))]),      2,      0, active( 7,    0, vec![(0, held_wdr(3)), (2, accepted_wdr(0))])     )]
-    #[case(active( 7,    0,  vec![(0, resolved_wdr(3))]),  2,      0, active( 7,    0, vec![(0, resolved_wdr(3)), (2, accepted_wdr(0))]) )]
-    #[case(active( 7,    0,  vec![(0, chrgd_bck_wdr(3))]), 2,      0, active( 7,    0, vec![(0, chrgd_bck_wdr(3)), (2, accepted_wdr(0))]))]
-    #[case(active( 7,    6,  vec![(0, accepted_wdr(3))]),  2,      4, active( 3,    6, vec![(0, accepted_wdr(3)), (2, accepted_wdr(4))]) )]
-    #[case(active( 7,    6,  vec![(0, held_wdr(3))]),      2,      4, active( 3,    6, vec![(0, held_wdr(3)), (2, accepted_wdr(4))])     )]
-    #[case(active( 7,    6,  vec![(0, resolved_wdr(3))]),  2,      4, active( 3,    6, vec![(0, resolved_wdr(3)), (2, accepted_wdr(4))]) )]
-    #[case(active( 7,    6,  vec![(0, chrgd_bck_wdr(3))]), 2,      4, active( 3,    6, vec![(0, chrgd_bck_wdr(3)), (2, accepted_wdr(4))]))]
-    #[case(active(-3,    6,  vec![(0, accepted_wdr(3))]),  2,      0, active(-3,    6, vec![(0, accepted_wdr(3)), (2, accepted_wdr(0))]) )]
-    #[case(active(-3,    6,  vec![(0, held_wdr(3))]),      2,      0, active(-3,    6, vec![(0, held_wdr(3)), (2, accepted_wdr(0))])     )]
-    #[case(active(-3,    6,  vec![(0, resolved_wdr(3))]),  2,      0, active(-3,    6, vec![(0, resolved_wdr(3)), (2, accepted_wdr(0))]) )]
-    #[case(active(-3,    6,  vec![(0, chrgd_bck_wdr(3))]), 2,      0, active(-3,    6, vec![(0, chrgd_bck_wdr(3)), (2, accepted_wdr(0))]))]
+    //    |-------------------- input -----------------------------| |------------------------------- output ----------------------------------|
+    //                                            tx
+    //     original_account,                      id,                                expected_account
+    //        avail, existing withdrawals,            amount, expected_status           avail, existing withdrawals
+    #[case(active(7, vec![]),                      0,      8, Err(InsufficientFund), active(7, vec![])                                          )]
+    #[case(active(7, vec![]),                      0,      0, Ok(Transacted),        active(7, vec![(0, accepted_wdr(0))])                      )]
+    #[case(active(7, vec![]),                      0,      4, Ok(Transacted),        active(3, vec![(0, accepted_wdr(4))])                      )]
+    #[case(active(7, vec![]),                      0,      7, Ok(Transacted),        active(0, vec![(0, accepted_wdr(7))])                      )]
+    #[case(active(7, vec![(0, accepted_wdr(3))]),  0,      3, Ok(Duplicate),         active(7, vec![(0, accepted_wdr(3))])                      )]
+    #[case(active(7, vec![(0, accepted_wdr(3))]),  1,      5, Ok(Transacted),        active(2, vec![(0, accepted_wdr(3)), (1, accepted_wdr(5))]))]
     fn active_account_cases(
         #[case] mut original: Account,
         #[case] transaction_id: TransactionId,
         #[case] amount_i64: i64,
+        #[case] expected_status: Result<SuccessStatus, WithdrawerError>,
         #[case] expected: Account,
     ) {
         let withdrawer = SimpleWithdrawer;
-        withdrawer
-            .withdraw(&mut original, transaction_id, amount(amount_i64))
-            .unwrap();
-        assert_eq!(original, expected);
-    }
-
-    #[rstest]
-    //     original_available,   withdraw_amount
-    #[rustfmt::skip(case)]
-    #[case(5, 7)]
-    #[case(0, 7)]
-    #[case(                -1,                 7)]
-    fn insufficient_fund_cases(#[case] original_available: i64, #[case] withdraw_amount: i64) {
-        let mut account = active(original_available, 0, vec![]);
-        let withdrawer = SimpleWithdrawer;
-        assert_matches!(
-            withdrawer.withdraw(&mut account, 0, amount(withdraw_amount)),
-            Err(WithdrawerError::InsufficientFund)
+        assert_eq!(
+            withdrawer.withdraw(&mut original, transaction_id, amount(amount_i64)),
+            expected_status
         );
+        assert_eq!(original, expected);
     }
 
     #[test]
@@ -193,8 +184,8 @@ mod tests {
         );
     }
 
-    fn active(available: i64, held: i64, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
-        account(Active, available, held, withdrawals)
+    fn active(available: i64, withdrawals: Vec<(TransactionId, Withdrawal)>) -> Account {
+        account(Active, available, 0, withdrawals)
     }
 
     fn account(
@@ -214,18 +205,6 @@ mod tests {
 
     fn accepted_wdr(amount_i64: i64) -> Withdrawal {
         withdrawal(amount_i64, WithdrawalStatus::Accepted)
-    }
-
-    fn held_wdr(amount_i64: i64) -> Withdrawal {
-        withdrawal(amount_i64, WithdrawalStatus::Held)
-    }
-
-    fn resolved_wdr(amount_i64: i64) -> Withdrawal {
-        withdrawal(amount_i64, WithdrawalStatus::Resolved)
-    }
-
-    fn chrgd_bck_wdr(amount_i64: i64) -> Withdrawal {
-        withdrawal(amount_i64, WithdrawalStatus::ChargedBack)
     }
 
     fn withdrawal(amount_i64: i64, status: WithdrawalStatus) -> Withdrawal {

@@ -45,7 +45,7 @@ impl AccountTransactor for SimpleAccountTransactor {
                 let _status = self.depositor.deposit(account, transaction_id, amount)?;
             }
             TransactionKind::Withdrawal { amount } => {
-                self.withdrawer.withdraw(account, transaction_id, amount)?
+                let _status = self.withdrawer.withdraw(account, transaction_id, amount)?;
             }
             TransactionKind::Dispute => self.disputer.dispute(account, transaction_id)?,
             TransactionKind::Resolve => self.resolver.resolve(account, transaction_id)?,
@@ -76,13 +76,7 @@ impl SimpleAccountTransactor {
 #[derive(Debug, PartialEq, Clone)]
 pub enum SuccessStatus {
     Transacted,
-    NoOp(NoOpReason),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum NoOpReason {
     Duplicate,
-    InsufficientFund,
 }
 
 /// TODO: collapse them into a general one that carries the internal error
@@ -95,9 +89,6 @@ pub enum AccountTransactorError {
 
     #[error("The account for client ({0}) is locked.")]
     AccountLocked(ClientId),
-
-    #[error("The transaction ({0}) is conflicting with a previous transaction")]
-    ConflictingWithPreviousTransaction(TransactionId),
 
     #[error("A previous transaction with id ({0}) is not found for client ({1})")]
     TransactionNotFound(TransactionId, ClientId),
@@ -129,9 +120,6 @@ impl From<DepositorError> for AccountTransactorError {
     fn from(err: DepositorError) -> Self {
         match err {
             DepositorError::AccountLocked => Self::CannotDepositToLockedAccount,
-            DepositorError::ConflictingWithPreviousTransaction(transaction_id) => {
-                Self::ConflictingWithPreviousTransaction(transaction_id)
-            }
         }
     }
 }
@@ -290,7 +278,7 @@ mod tests {
         let resolver = MockResolver::new();
         let backcharger = MockBackcharger::new();
         withdrawer.expect(&mut account, transaction_id, amount);
-        withdrawer.to_return(Ok(()));
+        withdrawer.to_return(Ok(super::SuccessStatus::Transacted));
         let processor = SimpleAccountTransactor::new_for_test(
             depositor,
             withdrawer,
