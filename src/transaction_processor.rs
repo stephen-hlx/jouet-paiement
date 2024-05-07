@@ -32,7 +32,7 @@ impl From<AccountTransactorError> for TransactionProcessorError {
             AccountTransactorError::CannotWithdrawFromLockedAccount => todo!(),
             AccountTransactorError::InsufficientFundForWithdrawal => todo!(),
             AccountTransactorError::CannotDisputeAgainstLockedAccount => todo!(),
-            AccountTransactorError::NoTransactionFound => todo!(),
+            AccountTransactorError::NoTransactionFound(_) => todo!(),
             AccountTransactorError::CannotResolveLockedAccount => todo!(),
             AccountTransactorError::CannotResolveNonDisputedTransaction(_) => todo!(),
             AccountTransactorError::CannotChargebackLockedAccount => todo!(),

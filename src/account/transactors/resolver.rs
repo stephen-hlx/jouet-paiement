@@ -1,13 +1,16 @@
-mod credit_debit_resolver;
+// mod credit_debit_resolver;
 mod credit_resolver;
-use crate::{account::Account, model::TransactionId};
-pub(crate) use credit_debit_resolver::CreditDebitResolver;
+use crate::{
+    account::{account_transactor::SuccessStatus, Account},
+    model::TransactionId,
+};
+pub(crate) use credit_resolver::CreditResolver;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ResolverError {
     AccountLocked,
-    CannotResoveNonDisputedTransaction(TransactionId),
-    NoTransactionFound,
+    NonDisputedTransaction(TransactionId),
+    NoTransactionFound(TransactionId),
 }
 
 pub(crate) trait Resolver {
@@ -15,7 +18,7 @@ pub(crate) trait Resolver {
         &self,
         account: &mut Account,
         transaction_id: TransactionId,
-    ) -> Result<(), ResolverError>;
+    ) -> Result<SuccessStatus, ResolverError>;
 }
 
 #[cfg(test)]
@@ -23,14 +26,17 @@ pub(crate) mod mock {
 
     use std::sync::{Arc, Mutex};
 
-    use crate::{account::Account, model::TransactionId};
+    use crate::{
+        account::{account_transactor::SuccessStatus, Account},
+        model::TransactionId,
+    };
 
     use super::{Resolver, ResolverError};
 
     pub(crate) struct MockResolver {
         expected_requests: Arc<Mutex<Vec<(Account, TransactionId)>>>,
         actual_requests: Arc<Mutex<Vec<(Account, TransactionId)>>>,
-        return_vals: Arc<Mutex<Vec<Result<(), ResolverError>>>>,
+        return_vals: Arc<Mutex<Vec<Result<SuccessStatus, ResolverError>>>>,
     }
 
     impl MockResolver {
@@ -49,7 +55,7 @@ pub(crate) mod mock {
                 .push((account.clone(), transaction_id));
         }
 
-        pub(crate) fn to_return(&self, result: Result<(), ResolverError>) {
+        pub(crate) fn to_return(&self, result: Result<SuccessStatus, ResolverError>) {
             self.return_vals.lock().unwrap().push(result);
         }
     }
@@ -59,7 +65,7 @@ pub(crate) mod mock {
             &self,
             account: &mut Account,
             transaction_id: TransactionId,
-        ) -> Result<(), ResolverError> {
+        ) -> Result<SuccessStatus, ResolverError> {
             self.actual_requests
                 .lock()
                 .unwrap()
